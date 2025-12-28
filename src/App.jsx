@@ -3,8 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import QrScanner from 'react-qr-scanner';
 import QRCode from 'qrcode.react';
 import { 
-  MapPin, ShieldAlert, CheckCircle, Smartphone, BarChart3, 
-  Users, QrCode, Plus, LogOut, Navigation, Zap, { 
+  
   MapPin, ShieldAlert, CheckCircle, Smartphone, BarChart3, 
   Users, QrCode, Plus, LogOut, Navigation, Zap, Printer,
   UserPlus, Briefcase, ChevronRight, Search, Activity, Trash2, Download,
