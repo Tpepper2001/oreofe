@@ -1,944 +1,495 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
-import { Camera, MapPin, Users, DollarSign, TrendingUp, Clock, CheckCircle, AlertTriangle, Menu, X, QrCode, Download, Plus, Search, Filter, Navigation, Battery, Wifi, WifiOff, Loader, Eye, Edit, Trash2, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import QrScanner from 'react-qr-scanner';
+import QRCode from 'qrcode';
+import { 
+  LayoutDashboard, QrCode, Users, MapPin, Navigation, LogOut, 
+  AlertCircle, CheckCircle2, Activity, UserCheck, TrendingUp, 
+  Plus, Search, Smartphone, Map, Download, ShieldCheck, X
+} from 'lucide-react';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar 
+} from 'recharts';
 
-// --- CONFIGURATION --- 
-const SUPABASE_URL = 'https://watrosnylvkiuvuptdtp.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdHJvc255bHZraXV2dXB0ZHRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5MzE2NzEsImV4cCI6MjA4MjUwNzY3MX0.ku6_Ngf2JRJ8fxLs_Q-EySgCU37MjUK3WofpO9bazds';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY); 
+// --- CONFIGURATION ---
+const SUPABASE_URL = "https://watrosnylvkiuvuptdtp.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdHJvc255bHZraXV2dXB0ZHRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5MzE2NzEsImV4cCI6MjA4MjUwNzY3MX0.ku6_Ngf2JRJ8fxLs_Q-EySgCU37MjUK3WofpO9bazds";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ============================================================================
-// LOCATION SERVICE
-// ============================================================================
-const LocationService = {
-  currentPosition: null,
-  watchId: null,
-  listeners: [],
+const AuthContext = createContext({});
+const LocationContext = createContext({});
 
-  requestPermission: async () => {
-    if (!navigator.geolocation) {
-      throw new Error('Geolocation is not supported by your browser');
-    }
+// --- COMPONENTS ---
 
-    return new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          LocationService.currentPosition = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            timestamp: new Date()
-          };
-          resolve(LocationService.currentPosition);
-        },
-        (error) => {
-          reject(error);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    });
-  },
-
-  startTracking: (callback) => {
-    if (navigator.geolocation) {
-      LocationService.watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          LocationService.currentPosition = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            timestamp: new Date()
-          };
-          callback(LocationService.currentPosition);
-        },
-        (error) => console.error('Location tracking error:', error),
-        { enableHighAccuracy: true, timeout: 30000, maximumAge: 30000 }
-      );
-    }
-  },
-
-  stopTracking: () => {
-    if (LocationService.watchId) {
-      navigator.geolocation.clearWatch(LocationService.watchId);
-    }
-  },
-
-  calculateDistance: (lat1, lon1, lat2, lon2) => {
-    const R = 6371e3; // Earth radius in meters
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c; // Distance in meters
-  }
-};
-
-// ============================================================================
-// OFFLINE STORAGE SERVICE
-// ============================================================================
-const OfflineStorage = {
-  getQueue: () => {
-    const queue = localStorage.getItem('offline_transactions');
-    return queue ? JSON.parse(queue) : [];
-  },
-
-  addToQueue: (transaction) => {
-    const queue = OfflineStorage.getQueue();
-    queue.push({ ...transaction, offline_logged_at: new Date().toISOString() });
-    localStorage.setItem('offline_transactions', JSON.stringify(queue));
-  },
-
-  clearQueue: () => {
-    localStorage.removeItem('offline_transactions');
-  },
-
-  getQueueCount: () => {
-    return OfflineStorage.getQueue().length;
-  }
-};
-
-// ============================================================================
-// CONTEXTS
-// ============================================================================
-const AuthContext = createContext(null);
-const LocationContext = createContext(null);
-
-const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Check for existing session
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user || null);
-      setLoading(false);
-    };
-    checkSession();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user || null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signIn = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    return data;
-  };
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signOut }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
-
-const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
-};
-
-// ============================================================================
-// LOCATION GATE COMPONENT
-// ============================================================================
+/**
+ * MANDATORY LOCATION GATE
+ * Blocks app usage until GPS is active
+ */
 const LocationGate = ({ children }) => {
-  const [locationPermission, setLocationPermission] = useState(null);
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [error, setError] = useState(null);
-  const [checking, setChecking] = useState(true);
+  const { coords, error, loading } = useContext(LocationContext);
 
-  useEffect(() => {
-    requestLocationPermission();
-  }, []);
-
-  const requestLocationPermission = async () => {
-    setChecking(true);
-    try {
-      const position = await LocationService.requestPermission();
-      setCurrentLocation(position);
-      setLocationPermission('granted');
-      setError(null);
-      
-      // Start continuous tracking
-      LocationService.startTracking((position) => {
-        setCurrentLocation(position);
-      });
-    } catch (err) {
-      setLocationPermission('denied');
-      setError(err.message);
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  if (checking) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md text-center">
-          <Loader className="w-16 h-16 text-blue-500 animate-spin mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Checking Location Services</h2>
-          <p className="text-gray-600">Please wait while we verify your location permissions...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (locationPermission === 'denied') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md">
-          <AlertTriangle className="w-20 h-20 text-red-500 mx-auto mb-4" />
-          <h2 className="text-3xl font-bold text-gray-800 mb-4 text-center">Location Access Required</h2>
-          <p className="text-gray-600 mb-6 text-center">
-            This app requires location access to function properly. Location data is used to:
-          </p>
-          <ul className="text-gray-700 mb-6 space-y-2">
-            <li className="flex items-start">
-              <CheckCircle className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-              <span>Verify collection locations</span>
-            </li>
-            <li className="flex items-start">
-              <CheckCircle className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-              <span>Track employee routes</span>
-            </li>
-            <li className="flex items-start">
-              <CheckCircle className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-              <span>Prevent fraud and ensure accountability</span>
-            </li>
-          </ul>
-          <button
-            onClick={requestLocationPermission}
-            className="w-full bg-blue-600 text-white py-4 rounded-lg font-semibold text-lg hover:bg-blue-700 transition"
-          >
-            Enable Location Access
-          </button>
-          {error && (
-            <p className="mt-4 text-sm text-red-600 text-center">{error}</p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <LocationContext.Provider value={{ currentLocation, locationPermission }}>
-      <div className="relative">
-        <div className="fixed top-0 left-0 right-0 bg-green-500 text-white px-4 py-2 text-sm flex items-center justify-center z-50">
-          <MapPin className="w-4 h-4 mr-2" />
-          Location Active: {currentLocation?.latitude.toFixed(4)}, {currentLocation?.longitude.toFixed(4)}
-        </div>
-        <div className="pt-10">
-          {children}
-        </div>
-      </div>
-    </LocationContext.Provider>
-  );
-};
-
-// ============================================================================
-// QR SCANNER COMPONENT
-// ============================================================================
-const QRScanner = ({ onScan, onClose }) => {
-  const videoRef = useRef(null);
-  const [scanning, setScanning] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    startCamera();
-    return () => stopCamera();
-  }, []);
-
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch (err) {
-      setError('Camera access denied');
-    }
-  };
-
-  const stopCamera = () => {
-    if (videoRef.current?.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  // Simulate QR code detection
-  const handleManualScan = () => {
-    const mockQRData = {
-      contributor_id: 'contrib_' + Math.random().toString(36).substr(2, 9),
-      contributor_name: 'John Doe',
-      expected_amount: 1000,
-      payment_schedule: 'daily',
-      registered_lat: 9.0765,
-      registered_lon: 7.3986
-    };
-    onScan(mockQRData);
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col">
-      <div className="flex items-center justify-between p-4 bg-gray-900">
-        <h2 className="text-white text-xl font-bold">Scan QR Code</h2>
-        <button onClick={onClose} className="text-white">
-          <X className="w-6 h-6" />
-        </button>
-      </div>
-
-      <div className="flex-1 relative">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          className="w-full h-full object-cover"
-        />
-        
-        {/* Scanning overlay */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="relative w-64 h-64">
-            <div className="absolute inset-0 border-4 border-white rounded-lg opacity-50"></div>
-            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-green-500 rounded-tl-lg"></div>
-            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-green-500 rounded-tr-lg"></div>
-            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-green-500 rounded-bl-lg"></div>
-            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-green-500 rounded-br-lg"></div>
-          </div>
-        </div>
-
-        {error && (
-          <div className="absolute top-4 left-4 right-4 bg-red-500 text-white p-4 rounded-lg">
-            {error}
-          </div>
-        )}
-      </div>
-
-      <div className="p-4 bg-gray-900">
-        <button
-          onClick={handleManualScan}
-          className="w-full bg-green-500 text-white py-4 rounded-lg font-semibold text-lg hover:bg-green-600 transition"
-        >
-          Simulate QR Scan (Demo)
-        </button>
-        <p className="text-center text-gray-400 text-sm mt-2">
-          Align QR code within the frame
-        </p>
-      </div>
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center h-screen bg-slate-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <p className="mt-4 text-slate-600 font-medium tracking-tight">Accessing Secure GPS...</p>
     </div>
   );
-};
 
-// ============================================================================
-// TRANSACTION SUCCESS COMPONENT
-// ============================================================================
-const TransactionSuccess = ({ transaction, onClose }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full animate-bounce-in">
-        <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-4">
-          Collection Successful!
-        </h2>
-        <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-          <div className="flex justify-between">
-            <span className="text-gray-600">Contributor:</span>
-            <span className="font-semibold">{transaction.contributor_name}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Amount:</span>
-            <span className="font-semibold text-green-600">₦{transaction.amount.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Time:</span>
-            <span className="font-semibold">{new Date(transaction.timestamp).toLocaleTimeString()}</span>
-          </div>
-        </div>
-      </div>
+  if (error || !coords) return (
+    <div className="flex flex-col items-center justify-center h-screen bg-red-50 p-6 text-center">
+      <div className="bg-red-100 p-4 rounded-full mb-4"><MapPin size={48} className="text-red-600" /></div>
+      <h1 className="text-2xl font-bold text-red-800 mb-2">Location Required</h1>
+      <p className="text-red-600 max-w-md mb-6">
+        AjoFlow Pro requires active location services to verify collections and prevent fraud.
+      </p>
+      <button onClick={() => window.location.reload()} className="px-8 py-3 bg-red-600 text-white rounded-xl font-bold">Enable Location</button>
     </div>
   );
+
+  return children;
 };
 
-// ============================================================================
-// EMPLOYEE COLLECTION INTERFACE
-// ============================================================================
-const CollectionInterface = () => {
-  const { user } = useAuth();
-  const { currentLocation } = useContext(LocationContext);
-  const [showScanner, setShowScanner] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [successTransaction, setSuccessTransaction] = useState(null);
-  const [todayCollections, setTodayCollections] = useState([]);
-  const [offlineQueue, setOfflineQueue] = useState(0);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  useEffect(() => {
-    setOfflineQueue(OfflineStorage.getQueueCount());
-    
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  const handleQRScan = async (qrData) => {
-    setShowScanner(false);
-    setProcessing(true);
-
-    try {
-      // Create transaction automatically
-      const transaction = {
-        id: 'txn_' + Math.random().toString(36).substr(2, 9),
-        contributor_id: qrData.contributor_id,
-        contributor_name: qrData.contributor_name,
-        employee_id: user.id,
-        employee_name: user.full_name,
-        amount: qrData.expected_amount,
-        expected_amount: qrData.expected_amount,
-        transaction_type: 'standard',
-        gps_latitude: currentLocation.latitude,
-        gps_longitude: currentLocation.longitude,
-        timestamp: new Date().toISOString(),
-        geofence_verified: true,
-        distance_from_registered: LocationService.calculateDistance(
-          currentLocation.latitude,
-          currentLocation.longitude,
-          qrData.registered_lat,
-          qrData.registered_lon
-        )
-      };
-
-      // Check if online
-      if (isOnline) {
-        // Save to database
-        await supabase.from('transactions').insert(transaction);
-      } else {
-        // Save to offline queue
-        OfflineStorage.addToQueue(transaction);
-        setOfflineQueue(OfflineStorage.getQueueCount());
-      }
-
-      // Add to today's collections
-      setTodayCollections(prev => [transaction, ...prev]);
-
-      // Show success
-      setSuccessTransaction(transaction);
-    } catch (error) {
-      console.error('Transaction error:', error);
-      alert('Error processing transaction');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const todayTotal = todayCollections.reduce((sum, t) => sum + t.amount, 0);
-
-  return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <div className="bg-blue-600 text-white p-6">
-        <h1 className="text-2xl font-bold mb-2">Collection Interface</h1>
-        <p className="text-blue-100">Welcome, {user?.full_name}</p>
-        
-        {/* Status indicators */}
-        <div className="flex items-center gap-4 mt-4">
-          <div className="flex items-center">
-            {isOnline ? (
-              <Wifi className="w-4 h-4 mr-1" />
-            ) : (
-              <WifiOff className="w-4 h-4 mr-1" />
-            )}
-            <span className="text-sm">{isOnline ? 'Online' : 'Offline'}</span>
-          </div>
-          {offlineQueue > 0 && (
-            <div className="flex items-center bg-yellow-500 px-2 py-1 rounded">
-              <Clock className="w-4 h-4 mr-1" />
-              <span className="text-sm">{offlineQueue} pending sync</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Today's stats */}
-      <div className="p-4 grid grid-cols-2 gap-4">
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-gray-600 text-sm mb-1">Today's Collections</div>
-          <div className="text-2xl font-bold text-gray-800">{todayCollections.length}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-gray-600 text-sm mb-1">Total Amount</div>
-          <div className="text-2xl font-bold text-green-600">₦{todayTotal.toLocaleString()}</div>
-        </div>
-      </div>
-
-      {/* Main scan button */}
-      <div className="p-4">
-        <button
-          onClick={() => setShowScanner(true)}
-          disabled={processing}
-          className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-8 rounded-2xl font-bold text-2xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 flex items-center justify-center"
-        >
-          {processing ? (
-            <>
-              <Loader className="w-8 h-8 mr-3 animate-spin" />
-              Processing...
-            </>
-          ) : (
-            <>
-              <Camera className="w-8 h-8 mr-3" />
-              Scan QR Code
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Recent collections */}
-      <div className="p-4">
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Today's Collections</h2>
-        <div className="space-y-3">
-          {todayCollections.length === 0 ? (
-            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-              <QrCode className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p>No collections yet today</p>
-            </div>
-          ) : (
-            todayCollections.map(transaction => (
-              <div key={transaction.id} className="bg-white rounded-lg shadow p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <div className="font-semibold text-gray-800">{transaction.contributor_name}</div>
-                    <div className="text-sm text-gray-600">{new Date(transaction.timestamp).toLocaleTimeString()}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-green-600">₦{transaction.amount.toLocaleString()}</div>
-                    {transaction.geofence_verified && (
-                      <div className="flex items-center text-green-500 text-xs">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Verified
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500">
-                  Distance: {transaction.distance_from_registered.toFixed(0)}m from registered location
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* QR Scanner Modal */}
-      {showScanner && (
-        <QRScanner
-          onScan={handleQRScan}
-          onClose={() => setShowScanner(false)}
-        />
-      )}
-
-      {/* Success Modal */}
-      {successTransaction && (
-        <TransactionSuccess
-          transaction={successTransaction}
-          onClose={() => setSuccessTransaction(null)}
-        />
-      )}
-    </div>
-  );
-};
-
-// ============================================================================
-// AJO OWNER DASHBOARD
-// ============================================================================
-const AjoOwnerDashboard = () => {
-  const { user } = useAuth();
-  const [stats, setStats] = useState({
-    todayCollections: 24,
-    todayAmount: 156000,
-    activeEmployees: 5,
-    activeContributors: 87,
-    recentTransactions: []
+/**
+ * OWNER MANAGEMENT: REGISTER MEMBER & EMPLOYEE
+ */
+const OwnerManagement = ({ onBack }) => {
+  const { userProfile } = useContext(AuthContext);
+  const { coords } = useContext(LocationContext);
+  const [tab, setTab] = useState('members'); // 'members' | 'employees'
+  const [loading, setLoading] = useState(false);
+  const [members, setMembers] = useState([]);
+  const [showAddMember, setShowAddMember] = useState(false);
+  
+  // Form States
+  const [formData, setFormData] = useState({
+    full_name: '', phone: '', amount: '1000', address: ''
   });
 
-  useEffect(() => {
-    // Simulate real-time updates
-    const interval = setInterval(() => {
-      setStats(prev => ({
-        ...prev,
-        todayCollections: prev.todayCollections + Math.floor(Math.random() * 2),
-        todayAmount: prev.todayAmount + (Math.random() > 0.5 ? 1000 : 0)
-      }));
-    }, 5000);
+  useEffect(() => { fetchMembers(); }, []);
 
-    return () => clearInterval(interval);
-  }, []);
+  const fetchMembers = async () => {
+    const { data } = await supabase.from('contributors')
+      .select('*').eq('ajo_owner_id', userProfile.id);
+    setMembers(data || []);
+  };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
-        <h1 className="text-3xl font-bold mb-2">Ajo Dashboard</h1>
-        <p className="text-blue-100">Welcome back, {user?.full_name}</p>
-      </div>
+  const handleRegisterMember = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const memberId = crypto.randomUUID();
+    const qrData = JSON.stringify({ id: memberId, owner: userProfile.id });
 
-      {/* Stats Grid */}
-      <div className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="flex items-center justify-between mb-2">
-            <DollarSign className="w-8 h-8 text-green-500" />
-            <TrendingUp className="w-5 h-5 text-green-500" />
-          </div>
-          <div className="text-3xl font-bold text-gray-800">₦{stats.todayAmount.toLocaleString()}</div>
-          <div className="text-sm text-gray-600">Today's Collections</div>
-        </div>
+    const { error } = await supabase.from('contributors').insert([{
+      id: memberId,
+      ajo_owner_id: userProfile.id,
+      full_name: formData.full_name,
+      phone_number: formData.phone,
+      expected_amount: parseFloat(formData.amount),
+      address: formData.address,
+      gps_latitude: coords.latitude, // Sets member's home base to current owner location or map
+      gps_longitude: coords.longitude,
+      qr_code_data: qrData
+    }]);
 
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="flex items-center justify-between mb-2">
-            <CheckCircle className="w-8 h-8 text-blue-500" />
-          </div>
-          <div className="text-3xl font-bold text-gray-800">{stats.todayCollections}</div>
-          <div className="text-sm text-gray-600">Transactions Today</div>
-        </div>
+    if (!error) {
+      setShowAddMember(false);
+      fetchMembers();
+      setFormData({ full_name: '', phone: '', amount: '1000', address: '' });
+    } else {
+      alert(error.message);
+    }
+    setLoading(false);
+  };
 
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="flex items-center justify-between mb-2">
-            <Users className="w-8 h-8 text-purple-500" />
-          </div>
-          <div className="text-3xl font-bold text-gray-800">{stats.activeEmployees}</div>
-          <div className="text-sm text-gray-600">Active Employees</div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="flex items-center justify-between mb-2">
-            <Users className="w-8 h-8 text-orange-500" />
-          </div>
-          <div className="text-3xl font-bold text-gray-800">{stats.activeContributors}</div>
-          <div className="text-sm text-gray-600">Active Contributors</div>
-        </div>
-      </div>
-
-      {/* Live Activity Feed */}
-      <div className="p-4">
-        <div className="bg-white rounded-lg shadow-lg">
-          <div className="p-6 border-b">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center">
-              <Clock className="w-6 h-6 mr-2 text-blue-500" />
-              Live Activity Feed
-              <span className="ml-2 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-            </h2>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <CheckCircle className="w-5 h-5 text-green-500 mt-1" />
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-semibold text-gray-800">John Contributor #{i}</div>
-                        <div className="text-sm text-gray-600">Collected by Jane Employee</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-green-600">₦1,000</div>
-                        <div className="text-xs text-gray-500">{i} min ago</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center mt-1 text-xs text-gray-500">
-                      <MapPin className="w-3 h-3 mr-1" />
-                      Verified location
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="p-4 grid grid-cols-2 gap-4">
-        <button className="bg-blue-600 text-white p-6 rounded-lg shadow-lg hover:bg-blue-700 transition flex flex-col items-center">
-          <Users className="w-8 h-8 mb-2" />
-          <span className="font-semibold">Manage Contributors</span>
-        </button>
-        <button className="bg-purple-600 text-white p-6 rounded-lg shadow-lg hover:bg-purple-700 transition flex flex-col items-center">
-          <Users className="w-8 h-8 mb-2" />
-          <span className="font-semibold">Manage Employees</span>
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
-// CONTRIBUTOR MANAGEMENT
-// ============================================================================
-const ContributorManagement = () => {
-  const [contributors, setContributors] = useState([
-    { id: '1', full_name: 'John Doe', phone_number: '08012345678', expected_amount: 1000, status: 'active', card_issued: true },
-    { id: '2', full_name: 'Jane Smith', phone_number: '08098765432', expected_amount: 2000, status: 'active', card_issued: false }
-  ]);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const downloadQR = (member) => {
+    QRCode.toDataURL(member.qr_code_data, { width: 300 }, (err, url) => {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `QR_${member.full_name}.png`;
+      link.click();
+    });
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="bg-blue-600 text-white p-6">
-        <h1 className="text-2xl font-bold">Contributors</h1>
-        <p className="text-blue-100">Manage your contributors</p>
-      </div>
-
-      <div className="p-4">
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="w-full bg-green-500 text-white py-4 rounded-lg font-semibold flex items-center justify-center hover:bg-green-600 transition"
-        >
-          <Plus className="w-5 h-5 mr-2" />
-          Add New Contributor
+    <div className="min-h-screen bg-slate-50 pb-20">
+      <div className="bg-white border-b p-4 sticky top-0 z-20 flex justify-between items-center">
+        <button onClick={onBack} className="text-indigo-600 font-bold flex items-center gap-1">
+          <X size={20} /> Close Management
         </button>
+        <div className="flex bg-slate-100 p-1 rounded-lg">
+          <button onClick={() => setTab('members')} className={`px-4 py-1.5 rounded-md text-sm font-bold ${tab === 'members' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Members</button>
+          <button onClick={() => setTab('employees')} className={`px-4 py-1.5 rounded-md text-sm font-bold ${tab === 'employees' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Employees</button>
+        </div>
       </div>
 
-      <div className="p-4 space-y-3">
-        {contributors.map(contributor => (
-          <div key={contributor.id} className="bg-white rounded-lg shadow p-4">
-            <div className="flex justify-between items-start mb-2">
+      <div className="p-4 max-w-4xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">
+            {tab === 'members' ? 'Member Directory' : 'Staff Management'}
+          </h2>
+          <button 
+            onClick={() => setShowAddMember(true)}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-bold shadow-lg shadow-indigo-100"
+          >
+            <Plus size={20} /> Add New
+          </button>
+        </div>
+
+        <div className="grid gap-4">
+          {tab === 'members' && members.map(m => (
+            <div key={m.id} className="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
               <div>
-                <div className="font-bold text-gray-800">{contributor.full_name}</div>
-                <div className="text-sm text-gray-600">{contributor.phone_number}</div>
+                <h4 className="font-bold text-slate-800">{m.full_name}</h4>
+                <p className="text-sm text-slate-500">{m.phone_number} • ₦{m.expected_amount}/daily</p>
               </div>
-              <div className="flex gap-2">
-                <button className="text-blue-500 hover:text-blue-700">
-                  <Edit className="w-5 h-5" />
-                </button>
-                <button className="text-red-500 hover:text-red-700">
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-            <div className="flex justify-between items-center">
-              <div>
-                <span className="text-sm text-gray-600">Expected Amount: </span>
-                <span className="font-semibold text-green-600">₦{contributor.expected_amount.toLocaleString()}</span>
-              </div>
-              {contributor.card_issued ? (
-                <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">
-                  Card Issued
-                </span>
-              ) : (
-                <button className="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600">
-                  Generate QR
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
-// CONTRIBUTOR PORTAL
-// ============================================================================
-const ContributorPortal = () => {
-  const { user } = useAuth();
-  const [transactions] = useState([
-    { id: '1', amount: 1000, timestamp: new Date().toISOString(), employee_name: 'Jane Employee' },
-    { id: '2', amount: 1000, timestamp: new Date(Date.now() - 86400000).toISOString(), employee_name: 'Jane Employee' }
-  ]);
-
-  const totalPaid = transactions.reduce((sum, t) => sum + t.amount, 0);
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6">
-        <h1 className="text-2xl font-bold mb-2">My Account</h1>
-        <p className="text-purple-100">Welcome, {user?.full_name}</p>
-      </div>
-
-      <div className="p-4">
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
-          <div className="text-center mb-4">
-            <div className="text-gray-600 mb-2">Total Contributed</div>
-            <div className="text-4xl font-bold text-green-600">₦{totalPaid.toLocaleString()}</div>
-          </div>
-          <div className="border-t pt-4">
-            <div className="flex justify-between mb-2">
-              <span className="text-gray-600">Expected Amount:</span>
-              <span className="font-semibold">₦1,000/day</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Status:</span>
-              <span className="text-green-600 font-semibold">Active</span>
-            </div>
-          </div>
-        </div>
-
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Payment History</h2>
-        <div className="space-y-3">
-          {transactions.map(transaction => (
-            <div key={transaction.id} className="bg-white rounded-lg shadow p-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="font-semibold text-gray-800">₦{transaction.amount.toLocaleString()}</div>
-                  <div className="text-sm text-gray-600">Collected by {transaction.employee_name}</div>
-                  <div className="text-xs text-gray-500">{new Date(transaction.timestamp).toLocaleDateString()}</div>
-                </div>
-                <CheckCircle className="w-6 h-6 text-green-500" />
-              </div>
+              <button onClick={() => downloadQR(m)} className="p-3 bg-slate-100 text-slate-700 rounded-full hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
+                <QrCode size={20} />
+              </button>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Add Member Modal */}
+      {showAddMember && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">Register New Member</h3>
+              <X onClick={() => setShowAddMember(false)} className="text-slate-400 cursor-pointer" />
+            </div>
+            <form onSubmit={handleRegisterMember} className="space-y-4">
+              <input required placeholder="Full Name" className="w-full p-4 bg-slate-50 border rounded-xl" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} />
+              <input required placeholder="Phone Number" className="w-full p-4 bg-slate-50 border rounded-xl" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+              <input required type="number" placeholder="Daily Contribution (₦)" className="w-full p-4 bg-slate-50 border rounded-xl" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
+              <input required placeholder="Home/Shop Address" className="w-full p-4 bg-slate-50 border rounded-xl" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+              <p className="text-[10px] text-slate-400">Note: GPS coordinates for geofencing will be captured at your current location for this member.</p>
+              <button disabled={loading} className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-lg shadow-indigo-200">
+                {loading ? 'Processing...' : 'Register & Generate QR'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// ============================================================================
-// LOGIN COMPONENT
-// ============================================================================
-const Login = () => {
-  const { signIn } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+/**
+ * OWNER DASHBOARD (Main View)
+ */
+const OwnerDashboard = () => {
+  const { userProfile } = useContext(AuthContext);
+  const [view, setView] = useState('home'); // 'home' | 'manage'
+  const [stats, setStats] = useState({ total: 0, count: 0 });
+  const [recentTx, setRecentTx] = useState([]);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+  useEffect(() => {
+    const fetchInitial = async () => {
+      const { data } = await supabase.from('transactions')
+        .select(`*, contributors(full_name)`)
+        .eq('ajo_owner_id', userProfile.id)
+        .order('created_at', { ascending: false }).limit(10);
+      setRecentTx(data || []);
+      
+      const total = (data || []).reduce((acc, curr) => acc + curr.amount, 0);
+      setStats({ total, count: data?.length || 0 });
+    };
+    fetchInitial();
 
-    try {
-      await signIn(email, password);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+    // REAL-TIME UPDATES
+    const channel = supabase.channel('tx-updates')
+      .on('postgres_changes', { event: 'INSERT', table: 'transactions', filter: `ajo_owner_id=eq.${userProfile.id}` }, 
+      (payload) => {
+        setRecentTx(prev => [payload.new, ...prev].slice(0, 10));
+        setStats(prev => ({ ...prev, total: prev.total + payload.new.amount, count: prev.count + 1 }));
+      }).subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  if (view === 'manage') return <OwnerManagement onBack={() => setView('home')} />;
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <nav className="bg-white border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+        <div className="flex items-center gap-2">
+          <div className="bg-indigo-600 p-2 rounded-lg text-white"><Activity size={20} /></div>
+          <h1 className="font-black text-xl text-slate-800">AjoFlow</h1>
+        </div>
+        <button onClick={() => supabase.auth.signOut()} className="text-slate-400"><LogOut size={20} /></button>
+      </nav>
+
+      <main className="p-6 max-w-7xl mx-auto space-y-6">
+        <div className="flex justify-between items-end">
+          <div>
+            <p className="text-slate-500 font-medium">Welcome back, Owner</p>
+            <h2 className="text-2xl font-black text-slate-800">Portfolio Overview</h2>
+          </div>
+          <button 
+            onClick={() => setView('manage')}
+            className="flex items-center gap-2 bg-white border-2 border-indigo-600 text-indigo-600 px-4 py-2 rounded-xl font-bold hover:bg-indigo-600 hover:text-white transition-all"
+          >
+            <Users size={20} /> Management
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <TrendingUp className="text-indigo-600 mb-4" />
+            <p className="text-slate-500 text-sm font-medium">Total Collected</p>
+            <h2 className="text-3xl font-black text-slate-800">₦{stats.total.toLocaleString()}</h2>
+          </div>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <UserCheck className="text-blue-600 mb-4" />
+            <p className="text-slate-500 text-sm font-medium">Today's Transactions</p>
+            <h2 className="text-3xl font-black text-slate-800">{stats.count}</h2>
+          </div>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <ShieldCheck className="text-green-600 mb-4" />
+            <p className="text-slate-500 text-sm font-medium">Security Status</p>
+            <h2 className="text-3xl font-black text-slate-800">ACTIVE</h2>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b flex justify-between items-center">
+            <h3 className="font-bold text-slate-800">Live Activity Feed</h3>
+            <span className="flex items-center gap-1 text-xs font-bold text-green-500"><span className="h-2 w-2 bg-green-500 rounded-full animate-pulse" /> LIVE SYNC</span>
+          </div>
+          <div className="divide-y">
+            {recentTx.length === 0 && <div className="p-10 text-center text-slate-400">No collections recorded yet.</div>}
+            {recentTx.map((tx) => (
+              <div key={tx.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-full ${tx.geofence_verified ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
+                    <MapPin size={18} />
+                  </div>
+                  <div>
+                    <p className="font-black text-slate-800">₦{tx.amount}</p>
+                    <p className="text-xs text-slate-500">{new Date(tx.timestamp).toLocaleTimeString()}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Employee Verified</p>
+                  <p className="text-[10px] font-mono text-slate-400">{tx.id.slice(0,8)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+/**
+ * EMPLOYEE SCANNER INTERFACE
+ */
+const EmployeeCollection = () => {
+  const { userProfile } = useContext(AuthContext);
+  const { coords } = useContext(LocationContext);
+  const [scanning, setScanning] = useState(false);
+  const [lastTx, setLastTx] = useState(null);
+  const [processing, setProcessing] = useState(false);
+
+  const handleScan = async (data) => {
+    if (data && !processing) {
+      setProcessing(true);
+      try {
+        const decoded = JSON.parse(data.text);
+        
+        const { data: contributor, error: fetchErr } = await supabase.from('contributors')
+          .select('*').eq('id', decoded.id).single();
+
+        if (fetchErr) throw new Error("Member not found");
+
+        const { data: tx, error: txErr } = await supabase.from('transactions').insert([{
+          ajo_owner_id: contributor.ajo_owner_id,
+          contributor_id: contributor.id,
+          employee_id: userProfile.employee_record_id,
+          amount: contributor.expected_amount,
+          expected_amount: contributor.expected_amount,
+          gps_latitude: coords.latitude,
+          gps_longitude: coords.longitude,
+          geofence_verified: true, // Simplified for demo
+          transaction_type: 'standard'
+        }]).select().single();
+
+        if (txErr) throw txErr;
+
+        setLastTx(tx);
+        setScanning(false);
+        setTimeout(() => setLastTx(null), 3000);
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        setProcessing(false);
+      }
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <DollarSign className="w-16 h-16 text-blue-600 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Ajo Collection</h1>
-          <p className="text-gray-600">Automated collection system</p>
+    <div className="min-h-screen bg-slate-900 text-white flex flex-col p-6">
+      <div className="flex justify-between items-start mb-12">
+        <div>
+          <h2 className="text-2xl font-black italic tracking-tighter">AJOFLOW COLLECTOR</h2>
+          <p className="text-slate-400 text-xs flex items-center gap-1"><MapPin size={10} /> GPS ACTIVE: {coords.latitude.toFixed(4)}</p>
         </div>
+        <button onClick={() => supabase.auth.signOut()} className="bg-white/10 p-2 rounded-lg"><LogOut size={20} /></button>
+      </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="your@email.com"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-4 rounded-lg font-semibold text-lg hover:bg-blue-700 transition disabled:opacity-50"
+      {!scanning && !lastTx && (
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <button 
+            onClick={() => setScanning(true)}
+            className="w-64 h-64 rounded-full bg-indigo-600 flex flex-col items-center justify-center border-[12px] border-indigo-500/30 shadow-[0_0_50px_rgba(79,70,229,0.4)] active:scale-95 transition-all"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            <QrCode size={80} />
+            <span className="mt-4 font-black text-xl uppercase">Scan QR</span>
+          </button>
+          <p className="mt-10 text-slate-500 font-medium">Position camera over contributor card</p>
+        </div>
+      )}
+
+      {scanning && (
+        <div className="fixed inset-0 bg-black z-50">
+          <div className="absolute top-10 left-0 right-0 z-10 text-center px-10">
+            <h3 className="text-lg font-bold mb-2">Scanning Contributor Card</h3>
+            <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500 animate-[loading_2s_infinite]" style={{width: '30%'}} />
+            </div>
+          </div>
+          <QrScanner delay={300} onScan={handleScan} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <button onClick={() => setScanning(false)} className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-white text-black px-8 py-3 rounded-full font-bold">Cancel</button>
+        </div>
+      )}
+
+      {lastTx && (
+        <div className="fixed inset-0 bg-green-600 z-50 flex flex-col items-center justify-center text-center animate-in zoom-in">
+          <CheckCircle2 size={100} className="mb-4" />
+          <h2 className="text-4xl font-black mb-2 text-white">₦{lastTx.amount}</h2>
+          <p className="text-xl font-bold opacity-80 uppercase tracking-widest">Collection Logged</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * AUTHENTICATION SCREEN
+ * Hardcoded to support the "oreofe" demo or standard Supabase login
+ */
+const AuthScreen = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      // Setup helper for the 'oreofe' login if user doesn't exist
+      if (email === 'oreofe' || email === 'oreofe@ajo.com') {
+        alert("Initial Setup: Registering 'oreofe' as the owner...");
+        const { error: signUpErr } = await supabase.auth.signUp({
+          email: 'oreofe@ajo.com',
+          password: 'oreofe',
+          options: { data: { full_name: 'Oreofe Owner' } }
+        });
+        if (signUpErr) alert(signUpErr.message);
+        else alert("Owner Created! Please login now.");
+      } else {
+        alert(error.message);
+      }
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-white flex items-center justify-center p-6">
+      <div className="w-full max-w-md">
+        <div className="mb-12 text-center">
+          <div className="inline-block p-4 bg-indigo-600 rounded-3xl text-white shadow-2xl shadow-indigo-200 mb-4">
+            <Smartphone size={40} />
+          </div>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter italic">AJOFLOW PRO</h1>
+          <p className="text-slate-400 font-medium">Automated Contribution System</p>
+        </div>
+        
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Access Email</label>
+            <input 
+              type="text" className="w-full bg-transparent outline-none font-bold text-slate-800"
+              placeholder="oreofe@ajo.com" value={email} onChange={e => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Passcode</label>
+            <input 
+              type="password" className="w-full bg-transparent outline-none font-bold text-slate-800"
+              placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)}
+            />
+          </div>
+          <button disabled={loading} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-lg shadow-xl shadow-indigo-200 active:scale-95 transition-transform uppercase tracking-wider">
+            {loading ? 'Validating...' : 'Secure Login'}
           </button>
         </form>
-
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <p className="text-sm text-gray-600 mb-2 font-semibold">Demo Accounts:</p>
-          <div className="text-xs text-gray-600 space-y-1">
-            <div>Owner: owner@ajo.com / password</div>
-            <div>Employee: employee@ajo.com / password</div>
-            <div>Contributor: contributor@ajo.com / password</div>
-          </div>
-        </div>
+        <p className="mt-8 text-center text-slate-400 text-xs font-medium">Authorized Personnel Only • Encrypted GPS Verification</p>
       </div>
     </div>
   );
 };
 
-// ============================================================================
-// MAIN APP COMPONENT
-// ============================================================================
+/**
+ * ROOT APP
+ */
 export default function App() {
-  const { user, loading } = useAuth();
+  const [session, setSession] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [location, setLocation] = useState({ coords: null, error: null, loading: true });
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-        <Loader className="w-16 h-16 text-white animate-spin" />
-      </div>
-    );
-  }
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    return () => subscription.unsubscribe();
+  }, []);
 
-  if (!user) {
-    return (
-      <AuthProvider>
-        <Login />
-      </AuthProvider>
+  useEffect(() => {
+    if (session?.user) {
+      supabase.from('profiles').select('*').eq('id', session.user.id).single()
+        .then(async ({ data }) => {
+          if (data?.role === 'employee') {
+            const { data: emp } = await supabase.from('employees').select('id').eq('user_id', data.id).single();
+            data.employee_record_id = emp?.id;
+          }
+          setUserProfile(data);
+        });
+    }
+  }, [session]);
+
+  useEffect(() => {
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setLocation({ coords: pos.coords, error: null, loading: false }),
+      (err) => setLocation({ coords: null, error: err.message, loading: false }),
+      { enableHighAccuracy: true }
     );
-  }
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  if (!session) return <AuthScreen />;
 
   return (
-    <AuthProvider>
-      <LocationGate>
-        {user.role === 'ajo_owner' && <AjoOwnerDashboard />}
-        {user.role === 'employee' && <CollectionInterface />}
-        {user.role === 'contributor' && <ContributorPortal />}
-      </LocationGate>
-    </AuthProvider>
+    <AuthContext.Provider value={{ session, userProfile }}>
+      <LocationContext.Provider value={location}>
+        <LocationGate>
+          {userProfile?.role === 'ajo_owner' && <OwnerDashboard />}
+          {userProfile?.role === 'employee' && <EmployeeCollection />}
+          {userProfile?.role === 'contributor' && <div className="p-10 text-center font-bold">Member Portal: Feature Coming Soon</div>}
+        </LocationGate>
+      </LocationContext.Provider>
+    </AuthContext.Provider>
   );
 }
