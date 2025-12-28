@@ -1,33 +1,33 @@
+/* 1. AT THE VERY TOP: External Imports */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,900;1,900&family=Inter:wght@400;500;700;900&display=swap');
+
+/* 2. Tailwind (If you are using Tailwind) */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Add a nice font to match the Ore-Ofe Oluwa brand */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,900;1,900&family=Inter:wght@400;700;900&display=swap');
-
-body {
-  font-family: 'Inter', sans-serif;
-  margin: 0;
-  padding: 0;
-  -webkit-font-smoothing: antialiased;
+/* 3. Base Styles */
+:root {
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
 }
 
-h1, .font-serif {
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: #f8fafc;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom class for the Oreofe Brand Font */
+.brand-font {
   font-family: 'Playfair Display', serif;
 }
 
-/* Ensure the membership card looks crisp when printed */
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  [id^="card-"], [id^="card-"] * {
-    visibility: visible;
-  }
-  [id^="card-"] {
-    position: absolute;
-    left: 0;
-    top: 0;
-    border: 4px solid #14532d !important; /* Force green border in print */
-  }
+/* Prevent text selection on buttons for a native app feel */
+button {
+  user-select: none;
+  -webkit-user-select: none;
 }
