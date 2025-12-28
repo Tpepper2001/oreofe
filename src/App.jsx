@@ -1,287 +1,293 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState, useRef, createContext, useContext } from "react";
 import { createClient } from "@supabase/supabase-js";
 import QrScanner from "react-qr-scanner";
-import QRCode from "qrcode.react";
-import {
-  Layout,
-  Users,
-  UserPlus,
-  Briefcase,
-  CreditCard,
-  LogOut,
-  QrCode,
-  CheckCircle,
-  ShieldAlert,
-  Download,
-  Printer,
-  Trash2,
-} from "lucide-react";
+import { MapPin, ShieldAlert, CheckCircle, LogOut, QrCode } from "lucide-react";
+import { format } from "date-fns";
 
-/* ===================== CONFIG ===================== */
-const SUPABASE_URL ='https://watrosnylvkiuvuptdtp.supabase.co';
+/* ============================
+   SUPABASE SETUP
+============================ */
+// --- CONFIGURATION --- 
+const SUPABASE_URL = 'https://watrosnylvkiuvuptdtp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdHJvc255bHZraXV2dXB0ZHRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5MzE2NzEsImV4cCI6MjA4MjUwNzY3MX0.ku6_Ngf2JRJ8fxLs_Q-EySgCU37MjUK3WofpO9bazds';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY); 
 
-const ORG_DETAILS = {
-  name: "ORE-OFE OLUWA",
-  address: "No. 1, Bisiriyu Owokade Street, Molete, Ibeju-Lekki, Lagos",
-  phones: ["08107218385", "08027203601"],
-};
+/* ============================
+   AUTH CONTEXT
+============================ */
+const AuthContext = createContext();
+const useAuth = () => useContext(AuthContext);
 
-/* ===================== THEME ===================== */
-const theme = Object.freeze({
-  primary: "#064e3b",
-  secondary: "#10b981",
-  accent: "#34d399",
-  bg: "#f8fafc",
-  white: "#ffffff",
-  text: "#0f172a",
-  gray: "#64748b",
-  error: "#dc2626",
-  radius: "18px",
-  shadow:
-    "0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)",
-});
-
-/* ===================== STYLES ===================== */
-const styles = {
-  glassCard: {
-    background: theme.white,
-    borderRadius: theme.radius,
-    padding: "24px",
-    boxShadow: theme.shadow,
-  },
-  input: {
-    width: "100%",
-    padding: "14px",
-    borderRadius: "14px",
-    border: "1px solid #e5e7eb",
-    outline: "none",
-  },
-  btn: {
-    padding: "14px",
-    borderRadius: "14px",
-    fontWeight: 800,
-    cursor: "pointer",
-    border: "none",
-  },
-  sidebar: {
-    width: "260px",
-    background: theme.primary,
-    color: "#fff",
-    height: "100vh",
-    position: "fixed",
-    padding: "24px",
-    display: "flex",
-    flexDirection: "column",
-  },
-  navBtn: {
-    padding: "14px",
-    borderRadius: "14px",
-    border: "none",
-    background: "transparent",
-    color: "#d1fae5",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    fontWeight: 700,
-  },
-  main: {
-    marginLeft: "260px",
-    padding: "40px",
-    minHeight: "100vh",
-    background: theme.bg,
-  },
-};
-
-/* ===================== MEMBERSHIP CARD ===================== */
-const MembershipCard = ({ member }) => {
-  const qrValue = `${member.id}|${member.expected_amount}|${member.registration_no}`;
-
-  const downloadQR = () => {
-    const canvas = document.getElementById(`qr-${member.id}`);
-    if (!canvas) return;
-    const url = canvas.toDataURL("image/png");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `QR_${member.registration_no}.png`;
-    a.click();
-  };
-
-  return (
-    <div style={{ ...styles.glassCard, width: 420 }}>
-      <h3 style={{ fontWeight: 900 }}>{member.full_name.toUpperCase()}</h3>
-      <p>Reg: {member.registration_no}</p>
-      <p>Daily: ₦{member.expected_amount.toLocaleString()}</p>
-      <p>{member.phone_number}</p>
-
-      <div style={{ margin: "20px 0" }}>
-        <QRCode id={`qr-${member.id}`} value={qrValue} size={140} />
-      </div>
-
-      <div style={{ display: "flex", gap: 10 }}>
-        <button onClick={downloadQR} style={{ ...styles.btn, background: theme.secondary }}>
-          <Download size={18} />
-        </button>
-        <button onClick={() => window.print()} style={{ ...styles.btn }}>
-          <Printer size={18} />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-/* ===================== LOGIN ===================== */
-const LoginPage = ({ onLogin }) => {
-  const [mode, setMode] = useState("agent");
-  const [creds, setCreds] = useState({ user: "", pass: "", empId: "" });
-  const [error, setError] = useState("");
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError("");
-
-    if (mode === "admin") {
-      if (creds.user === "oreofe" && creds.pass === "oreofe") {
-        onLogin({ role: "admin" });
-      } else {
-        setError("Invalid admin credentials");
-      }
-    } else {
-      const { data } = await supabase
-        .from("employees")
-        .select("*")
-        .eq("employee_id_number", creds.empId)
-        .single();
-
-      if (data) onLogin({ ...data, role: "employee" });
-      else setError("Agent ID not authorized");
-    }
-  };
-
-  return (
-    <div style={{ height: "100vh", display: "flex", justifyContent: "center", alignItems: "center" }}>
-      <form onSubmit={handleLogin} style={{ ...styles.glassCard, width: 420 }}>
-        <h2 style={{ textAlign: "center", fontWeight: 900 }}>{ORG_DETAILS.name}</h2>
-
-        <div style={{ display: "flex", gap: 10, margin: "20px 0" }}>
-          <button type="button" onClick={() => setMode("agent")} style={styles.btn}>
-            Agent
-          </button>
-          <button type="button" onClick={() => setMode("admin")} style={styles.btn}>
-            Admin
-          </button>
-        </div>
-
-        {mode === "admin" ? (
-          <>
-            <input style={styles.input} placeholder="Username" onChange={(e) => setCreds({ ...creds, user: e.target.value })} />
-            <input style={styles.input} type="password" placeholder="Password" onChange={(e) => setCreds({ ...creds, pass: e.target.value })} />
-          </>
-        ) : (
-          <input style={styles.input} placeholder="Agent ID Number" onChange={(e) => setCreds({ ...creds, empId: e.target.value })} />
-        )}
-
-        {error && <p style={{ color: theme.error }}>{error}</p>}
-        <button style={{ ...styles.btn, background: theme.primary, color: "#fff", marginTop: 20 }}>
-          Login
-        </button>
-      </form>
-    </div>
-  );
-};
-
-/* ===================== ADMIN DASHBOARD ===================== */
-const AdminDashboard = ({ onLogout }) => {
-  const [view, setView] = useState("members");
-  const [members, setMembers] = useState([]);
+function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from("contributors").select("*").then(({ data }) => setMembers(data || []));
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => listener.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single()
+      .then(({ data }) => setProfile(data));
+  }, [user]);
+
   return (
-    <>
-      <aside style={styles.sidebar}>
-        <h2 style={{ fontWeight: 900 }}>{ORG_DETAILS.name}</h2>
-        <button style={styles.navBtn} onClick={() => setView("members")}>
-          <Users size={18} /> Members
-        </button>
-        <button style={{ ...styles.navBtn, marginTop: "auto", color: "#fecaca" }} onClick={onLogout}>
-          <LogOut size={18} /> Logout
-        </button>
-      </aside>
-
-      <main style={styles.main}>
-        {view === "members" && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(420px,1fr))", gap: 24 }}>
-            {members.map((m) => (
-              <MembershipCard key={m.id} member={m} />
-            ))}
-          </div>
-        )}
-      </main>
-    </>
+    <AuthContext.Provider value={{ user, profile, loading }}>
+      {children}
+    </AuthContext.Provider>
   );
-};
+}
 
-/* ===================== AGENT DASHBOARD ===================== */
-const AgentDashboard = ({ user, onLogout }) => {
-  const [scanning, setScanning] = useState(false);
-  const [status, setStatus] = useState("idle");
+/* ============================
+   LOCATION GATE (NON-NEGOTIABLE)
+============================ */
+function LocationGate({ children }) {
+  const [allowed, setAllowed] = useState(false);
+  const [error, setError] = useState("");
+  const watchId = useRef(null);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setError("Geolocation not supported");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      () => setAllowed(true),
+      () => setError("Location permission is REQUIRED"),
+      { enableHighAccuracy: true }
+    );
+
+    watchId.current = navigator.geolocation.watchPosition(
+      () => {},
+      () => setError("Location service disabled"),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId.current);
+  }, []);
+
+  if (error) {
+    return (
+      <div style={styles.blocker}>
+        <ShieldAlert size={64} color="red" />
+        <h2>Location Required</h2>
+        <p>{error}</p>
+      </div>
+    );
+  }
+
+  if (!allowed) {
+    return (
+      <div style={styles.blocker}>
+        <MapPin size={64} />
+        <h2>Requesting Location…</h2>
+      </div>
+    );
+  }
+
+  return children;
+}
+
+/* ============================
+   DISTANCE CALCULATION
+============================ */
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(Δφ / 2) ** 2 +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+/* ============================
+   TRANSACTION PROCESSOR
+============================ */
+async function processTransaction({ qrData, employee, ajoOwnerId }) {
+  const parsed = JSON.parse(atob(qrData));
+  const position = await new Promise((res, rej) =>
+    navigator.geolocation.getCurrentPosition(res, rej, {
+      enableHighAccuracy: true,
+    })
+  );
+
+  const { data: contributor } = await supabase
+    .from("contributors")
+    .select("*")
+    .eq("id", parsed.contributor_id)
+    .single();
+
+  const distance = haversine(
+    position.coords.latitude,
+    position.coords.longitude,
+    contributor.gps_latitude,
+    contributor.gps_longitude
+  );
+
+  await supabase.from("transactions").insert({
+    ajo_owner_id: ajoOwnerId,
+    contributor_id: contributor.id,
+    employee_id: employee.id,
+    amount: contributor.expected_amount,
+    expected_amount: contributor.expected_amount,
+    transaction_type: "standard",
+    gps_latitude: position.coords.latitude,
+    gps_longitude: position.coords.longitude,
+    distance_from_registered: distance,
+    geofence_verified: distance <= 100,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/* ============================
+   EMPLOYEE COLLECTION SCREEN
+============================ */
+function CollectionInterface() {
+  const { profile } = useAuth();
+  const [status, setStatus] = useState("");
 
   const handleScan = async (data) => {
-    if (!data || status !== "idle") return;
+    if (!data?.text) return;
+    setStatus("Processing…");
 
-    const [id, amount] = data.text.split("|");
-    setStatus("processing");
+    const { data: employee } = await supabase
+      .from("employees")
+      .select("*")
+      .eq("user_id", profile.id)
+      .single();
 
-    await supabase.from("transactions").insert([
-      { contributor_id: id, employee_id: user.id, amount: Number(amount) },
-    ]);
+    await processTransaction({
+      qrData: data.text,
+      employee,
+      ajoOwnerId: profile.ajo_owner_id,
+    });
 
-    setStatus("success");
-    setTimeout(() => {
-      setStatus("idle");
-      setScanning(false);
-    }, 2500);
+    setStatus("Collected ✔");
+    setTimeout(() => setStatus(""), 2500);
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: theme.bg }}>
-      <header style={{ padding: 24, display: "flex", justifyContent: "space-between" }}>
-        <h2>{ORG_DETAILS.name}</h2>
-        <button onClick={onLogout} style={styles.btn}>
-          <LogOut />
-        </button>
-      </header>
-
-      <main style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
-        {status === "success" ? (
-          <CheckCircle size={120} color={theme.secondary} />
-        ) : scanning ? (
-          <QrScanner delay={300} onScan={handleScan} />
-        ) : (
-          <button onClick={() => setScanning(true)} style={{ ...styles.btn, background: theme.primary, color: "#fff" }}>
-            <QrCode size={60} />
-            <p>SCAN CARD</p>
-          </button>
-        )}
-      </main>
+    <div style={styles.page}>
+      <h1>Scan Contribution</h1>
+      <QrScanner
+        delay={300}
+        onScan={handleScan}
+        onError={() => {}}
+        style={{ width: "100%" }}
+      />
+      {status && <p>{status}</p>}
     </div>
   );
-};
+}
 
-/* ===================== APP ROOT ===================== */
-export default function App() {
-  const [user, setUser] = useState(null);
+/* ============================
+   OWNER DASHBOARD (REALTIME)
+============================ */
+function AjoOwnerDashboard() {
+  const { profile } = useAuth();
+  const [tx, setTx] = useState([]);
 
-  if (!user) return <LoginPage onLogin={setUser} />;
+  useEffect(() => {
+    supabase
+      .from("transactions")
+      .select("*")
+      .eq("ajo_owner_id", profile.id)
+      .order("timestamp", { ascending: false })
+      .then(({ data }) => setTx(data));
 
-  return user.role === "admin" ? (
-    <AdminDashboard onLogout={() => setUser(null)} />
-  ) : (
-    <AgentDashboard user={user} onLogout={() => setUser(null)} />
+    const channel = supabase
+      .channel("realtime-tx")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "transactions" },
+        (p) => setTx((t) => [p.new, ...t])
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [profile]);
+
+  return (
+    <div style={styles.page}>
+      <h1>Live Collections</h1>
+      {tx.map((t) => (
+        <div key={t.id} style={styles.card}>
+          ₦{t.amount} • {format(new Date(t.timestamp), "HH:mm:ss")}
+          {t.geofence_verified ? (
+            <CheckCircle color="green" />
+          ) : (
+            <ShieldAlert color="orange" />
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
+
+/* ============================
+   APP ROOT
+============================ */
+export default function App() {
+  return (
+    <AuthProvider>
+      <LocationGate>
+        <Main />
+      </LocationGate>
+    </AuthProvider>
+  );
+}
+
+function Main() {
+  const { profile, loading } = useAuth();
+  if (loading) return <div>Loading…</div>;
+  if (!profile) return <div>Please log in</div>;
+
+  if (profile.role === "employee") return <CollectionInterface />;
+  if (profile.role === "ajo_owner") return <AjoOwnerDashboard />;
+
+  return <div>Contributor Portal</div>;
+}
+
+/* ============================
+   STYLES
+============================ */
+const styles = {
+  blocker: {
+    height: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "#111",
+    color: "#fff",
+    textAlign: "center",
+  },
+  page: { padding: 20 },
+  card: {
+    padding: 12,
+    marginBottom: 8,
+    background: "#f3f3f3",
+    borderRadius: 6,
+    display: "flex",
+    justifyContent: "space-between",
+  },
+};
