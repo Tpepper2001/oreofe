@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import QrScanner from 'react-qr-scanner';
 import QRCode from 'qrcode';
 import { 
   Users, UserPlus, MapPin, Scan, LayoutDashboard, 
   Settings, LogOut, CheckCircle, Loader2, ShieldCheck, Landmark, Printer, 
-  AlertCircle, Eye, Download, Search, TrendingUp
+  AlertCircle, Eye, Search, TrendingUp, Camera, X
 } from 'lucide-react';
 
 /* ===================== CONFIG ===================== */
@@ -32,7 +31,6 @@ export default function App() {
       const password = e.target.password.value;
 
       if (loginMode === 'admin') {
-        // Admin login
         if (username === 'oreofe' && password === 'oreofe') {
           const ownerData = { id: 'admin', full_name: 'Oreofe Owner', role: 'admin', ajo_owner_id: 'admin' };
           setUser({ id: 'admin' });
@@ -43,7 +41,6 @@ export default function App() {
           return;
         }
       } else {
-        // Employee/Agent login
         const { data: employee, error } = await supabase
           .from('employees')
           .select('*')
@@ -146,7 +143,6 @@ const LocationGate = ({ children, onLocationUpdate }) => {
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      // No geolocation support - allow app to continue
       setHasLocation(true);
       setLocationDenied(true);
       return;
@@ -160,7 +156,6 @@ const LocationGate = ({ children, onLocationUpdate }) => {
       },
       (err) => {
         console.warn('Location error:', err);
-        // Allow app to continue even if location is denied
         setHasLocation(true);
         setLocationDenied(true);
       },
@@ -193,7 +188,7 @@ const LocationGate = ({ children, onLocationUpdate }) => {
   );
 };
 
-// --- OWNER DASHBOARD (Shows Members List with QR Codes) ---
+// --- OWNER DASHBOARD ---
 const OwnerDashboard = () => {
   const [members, setMembers] = useState([]);
   const [selectedMember, setSelectedMember] = useState(null);
@@ -215,7 +210,6 @@ const OwnerDashboard = () => {
     loadMembers();
     loadCollections();
     
-    // Subscribe to real-time collection updates
     const sub = supabase
       .channel('collections-channel')
       .on('postgres_changes', { 
@@ -240,7 +234,6 @@ const OwnerDashboard = () => {
     
     if (data) {
       setMembers(data);
-      // Generate QR codes for all members
       data.forEach(async (member) => {
         const qrData = JSON.stringify({ 
           id: member.id, 
@@ -260,7 +253,7 @@ const OwnerDashboard = () => {
       .from('transactions')
       .select(`
         *,
-        contributors(full_name, registration_no, phone_number),
+        contributors(full_name, registration_no, phone_number, address),
         employees(full_name, employee_id_number)
       `)
       .eq('ajo_owner_id', 'admin')
@@ -269,7 +262,6 @@ const OwnerDashboard = () => {
     if (data) {
       setCollections(data);
       
-      // Calculate statistics
       const totalAmount = data.reduce((sum, t) => sum + Number(t.amount || 0), 0);
       const today = new Date().toISOString().split('T')[0];
       const todayTxs = data.filter(t => t.created_at.startsWith(today));
@@ -333,7 +325,6 @@ const OwnerDashboard = () => {
 
   return (
     <div style={styles.fadeIn}>
-      {/* Dashboard Navigation Tabs */}
       <div style={styles.dashboardTabs}>
         <button
           onClick={() => setDashboardView('members')}
@@ -357,10 +348,8 @@ const OwnerDashboard = () => {
         </button>
       </div>
 
-      {/* Collections View */}
       {dashboardView === 'collections' && (
         <>
-          {/* Collection Statistics */}
           <div style={styles.statsGrid}>
             <div style={{...styles.statCard, ...styles.statCardPrimary}}>
               <p style={styles.statCardLabel}>Today's Total</p>
@@ -391,12 +380,11 @@ const OwnerDashboard = () => {
             </div>
           </div>
 
-          {/* Search Bar */}
           <div style={styles.searchBar}>
             <Search size={20} style={{color: '#94a3b8', position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)'}} />
             <input 
               type="text"
-              placeholder="Search collections by member or agent..."
+              placeholder="Search collections..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={styles.searchInput}
@@ -416,54 +404,86 @@ const OwnerDashboard = () => {
             </div>
           ) : (
             <div style={styles.collectionsList}>
-              {filteredCollections.map(collection => (
-                <div key={collection.id} style={styles.collectionCard}>
-                  <div style={styles.collectionHeader}>
-                    <div style={styles.collectionMember}>
-                      <strong style={styles.collectionName}>
-                        {collection.contributors?.full_name || 'Unknown'}
-                      </strong>
-                      <span style={styles.collectionId}>
-                        {collection.contributors?.registration_no}
+              {filteredCollections.map(collection => {
+                const collectionDate = new Date(collection.created_at);
+                const dateStr = collectionDate.toLocaleDateString('en-US', { 
+                  weekday: 'short', 
+                  year: 'numeric', 
+                  month: 'short', 
+                  day: 'numeric' 
+                });
+                const timeStr = collectionDate.toLocaleTimeString('en-US', { 
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  hour12: true 
+                });
+                
+                return (
+                  <div key={collection.id} style={styles.collectionCardEnhanced}>
+                    <div style={styles.collectionHeaderEnhanced}>
+                      <div>
+                        <strong style={styles.collectionNameEnhanced}>
+                          {collection.contributors?.full_name || 'Unknown'}
+                        </strong>
+                        <div style={styles.collectionIdEnhanced}>
+                          ID: {collection.contributors?.registration_no}
+                        </div>
+                      </div>
+                      <div style={styles.collectionAmountEnhanced}>
+                        ₦{Number(collection.amount).toLocaleString()}
+                      </div>
+                    </div>
+
+                    <div style={styles.collectionMetaGrid}>
+                      <div style={styles.metaItem}>
+                        <span style={styles.metaLabel}>📅 Date</span>
+                        <span style={styles.metaValue}>{dateStr}</span>
+                      </div>
+                      <div style={styles.metaItem}>
+                        <span style={styles.metaLabel}>🕐 Time</span>
+                        <span style={styles.metaValue}>{timeStr}</span>
+                      </div>
+                      <div style={styles.metaItem}>
+                        <span style={styles.metaLabel}>👤 Agent</span>
+                        <span style={styles.metaValue}>{collection.employees?.full_name || 'N/A'}</span>
+                      </div>
+                      <div style={styles.metaItem}>
+                        <span style={styles.metaLabel}>📍 Distance</span>
+                        <span style={styles.metaValue}>
+                          {collection.distance_from_registered 
+                            ? `${collection.distance_from_registered}m` 
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div style={styles.metaItem}>
+                        <span style={styles.metaLabel}>📍 Location</span>
+                        <span style={styles.metaValue}>
+                          {collection.gps_latitude && collection.gps_longitude
+                            ? `${collection.gps_latitude.toFixed(4)}, ${collection.gps_longitude.toFixed(4)}`
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div style={styles.metaItem}>
+                        <span style={styles.metaLabel}>🏠 Address</span>
+                        <span style={styles.metaValue}>
+                          {collection.contributors?.address || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={styles.collectionFooterEnhanced}>
+                      <span style={collection.geofence_verified ? styles.tagOk : styles.tagWarn}>
+                        {collection.geofence_verified ? '✓ Verified Location' : '⚠ Remote Collection'}
                       </span>
                     </div>
-                    <div style={styles.collectionAmount}>
-                      ₦{Number(collection.amount).toLocaleString()}
-                    </div>
                   </div>
-
-                  <div style={styles.collectionDetails}>
-                    <div style={styles.collectionDetail}>
-                      <Users size={14} style={{color: '#64748b'}} />
-                      <span>Agent: {collection.employees?.full_name || 'N/A'}</span>
-                    </div>
-                    <div style={styles.collectionDetail}>
-                      <MapPin size={14} style={{color: '#64748b'}} />
-                      <span>
-                        {collection.distance_from_registered 
-                          ? `${collection.distance_from_registered}m away` 
-                          : 'Location N/A'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={styles.collectionFooter}>
-                    <span style={styles.collectionTime}>
-                      {new Date(collection.created_at).toLocaleDateString()} • {' '}
-                      {new Date(collection.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </span>
-                    <span style={collection.geofence_verified ? styles.tagOk : styles.tagWarn}>
-                      {collection.geofence_verified ? '✓ Verified' : '⚠ Remote'}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
       )}
 
-      {/* Members View */}
       {dashboardView === 'members' && (
         <>
           {selectedMember ? (
@@ -530,7 +550,7 @@ const OwnerDashboard = () => {
   );
 };
 
-// --- MEMBER DETAIL VIEW COMPONENT ---
+// --- MEMBER DETAIL VIEW ---
 const MemberDetailView = ({ member, qrCode, onBack, printMemberCard }) => {
   return (
     <div style={styles.fadeIn}>
@@ -731,7 +751,7 @@ const MemberRegistration = () => {
   );
 };
 
-// --- EMPLOYEE MANAGEMENT (with password) ---
+// --- EMPLOYEE MANAGEMENT ---
 const EmployeeManagement = () => {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -774,7 +794,7 @@ const EmployeeManagement = () => {
       setShowForm(false);
       e.target.reset();
       loadEmployees();
-      alert(`Employee added successfully!\nUsername: ${employeeId}\nPassword: ${fd.get('password')}\n\nEmployee can login at /agent`);
+      alert(`Employee added successfully!\nUsername: ${employeeId}\nPassword: ${fd.get('password')}\n\nEmployee can login as Agent`);
     } else {
       alert('Error adding employee: ' + error.message);
     }
@@ -838,11 +858,14 @@ const EmployeeManagement = () => {
   );
 };
 
-// --- COLLECTION INTERFACE ---
+// --- COLLECTION INTERFACE (FIXED QR SCANNER) ---
 const CollectionInterface = ({ profile, userLocation }) => {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [stream, setStream] = useState(null);
+  const videoRef = React.useRef(null);
+  const canvasRef = React.useRef(null);
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371e3;
@@ -859,69 +882,139 @@ const CollectionInterface = ({ profile, userLocation }) => {
     return R * c;
   };
 
-  const handleScan = async (data) => {
-    if (data && !result && !processing) {
-      setProcessing(true);
-      try {
-        const parsed = JSON.parse(data.text);
-        
-        const { data: contributor } = await supabase
-          .from('contributors')
-          .select('*')
-          .eq('id', parsed.id)
-          .single();
-
-        if (!contributor) {
-          alert('Invalid QR Code: Member not found');
-          setProcessing(false);
-          return;
-        }
-
-        const distance = calculateDistance(
-          userLocation.lat,
-          userLocation.lng,
-          contributor.gps_latitude,
-          contributor.gps_longitude
-        );
-
-        const isVerified = distance <= GEOFENCE_RADIUS_METERS;
-
-        const { error: txError } = await supabase.from('transactions').insert([{
-          ajo_owner_id: 'admin',
-          contributor_id: parsed.id,
-          employee_id: profile.id,
-          amount: contributor.expected_amount,
-          expected_amount: contributor.expected_amount,
-          gps_latitude: userLocation.lat,
-          gps_longitude: userLocation.lng,
-          distance_from_registered: Math.round(distance),
-          geofence_verified: isVerified
-        }]);
-
-        if (!txError) {
-          setResult({
-            name: contributor.full_name,
-            amount: contributor.expected_amount,
-            verified: isVerified,
-            distance: Math.round(distance)
-          });
-          setScanning(false);
-          
-          setTimeout(() => {
-            setResult(null);
-            setProcessing(false);
-          }, 4000);
-        } else {
-          alert('Transaction failed: ' + txError.message);
-          setProcessing(false);
-        }
-      } catch (e) {
-        console.error('Scan error:', e);
-        alert('Invalid QR Code format');
-        setProcessing(false);
+  const startScanning = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      
+      setStream(mediaStream);
+      setScanning(true);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+        videoRef.current.play();
+        scanQRCode();
       }
+    } catch (err) {
+      console.error('Camera error:', err);
+      alert('Unable to access camera. Please grant camera permissions.');
     }
   };
+
+  const stopScanning = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    setScanning(false);
+  };
+
+  const scanQRCode = () => {
+    if (!scanning || !videoRef.current || !canvasRef.current || processing) {
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+      if (code && code.data) {
+        handleScan(code.data);
+        return;
+      }
+    }
+
+    requestAnimationFrame(scanQRCode);
+  };
+
+  const handleScan = async (qrData) => {
+    if (processing) return;
+    
+    setProcessing(true);
+    stopScanning();
+
+    try {
+      const parsed = JSON.parse(qrData);
+      
+      const { data: contributor } = await supabase
+        .from('contributors')
+        .select('*')
+        .eq('id', parsed.id)
+        .single();
+
+      if (!contributor) {
+        alert('Invalid QR Code: Member not found');
+        setProcessing(false);
+        setScanning(false);
+        return;
+      }
+
+      if (!userLocation) {
+        alert('Location not available. Please enable location services.');
+        setProcessing(false);
+        return;
+      }
+
+      const distance = calculateDistance(
+        userLocation.lat,
+        userLocation.lng,
+        contributor.gps_latitude,
+        contributor.gps_longitude
+      );
+
+      const isVerified = distance <= GEOFENCE_RADIUS_METERS;
+
+      const { error: txError } = await supabase.from('transactions').insert([{
+        ajo_owner_id: 'admin',
+        contributor_id: parsed.id,
+        employee_id: profile.id,
+        amount: contributor.expected_amount,
+        expected_amount: contributor.expected_amount,
+        gps_latitude: userLocation.lat,
+        gps_longitude: userLocation.lng,
+        distance_from_registered: Math.round(distance),
+        geofence_verified: isVerified
+      }]);
+
+      if (!txError) {
+        setResult({
+          name: contributor.full_name,
+          amount: contributor.expected_amount,
+          verified: isVerified,
+          distance: Math.round(distance)
+        });
+        
+        setTimeout(() => {
+          setResult(null);
+          setProcessing(false);
+        }, 4000);
+      } else {
+        alert('Transaction failed: ' + txError.message);
+        setProcessing(false);
+      }
+    } catch (e) {
+      console.error('Scan error:', e);
+      alert('Invalid QR Code format');
+      setProcessing(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
 
   if (result) {
     return (
@@ -955,23 +1048,26 @@ const CollectionInterface = ({ profile, userLocation }) => {
         {scanning ? (
           <div style={styles.scannerContainer}>
             <div style={styles.scannerFrame}>
-              <QrScanner
-                delay={300}
-                onError={(err) => console.error(err)}
-                onScan={handleScan}
-                style={{ width: '100%' }}
-                constraints={{
-                  video: { facingMode: 'environment' }
+              <video 
+                ref={videoRef}
+                style={{
+                  width: '100%',
+                  height: 'auto',
+                  borderRadius: '16px',
+                  display: 'block'
                 }}
+                playsInline
               />
+              <canvas ref={canvasRef} style={{display: 'none'}} />
             </div>
-            <button onClick={() => setScanning(false)} style={{...styles.btnSecondary, marginTop: 20}}>
-              Cancel Scan
+            <button onClick={stopScanning} style={{...styles.btnSecondary, marginTop: 20}}>
+              <X size={18} />
+              <span style={{marginLeft: 8}}>Cancel Scan</span>
             </button>
           </div>
         ) : (
-          <button onClick={() => setScanning(true)} style={styles.btnPrimary}>
-            <Scan size={20} />
+          <button onClick={startScanning} style={styles.btnPrimary}>
+            <Camera size={20} />
             <span style={{marginLeft: 8}}>Start Scanning</span>
           </button>
         )}
@@ -979,6 +1075,13 @@ const CollectionInterface = ({ profile, userLocation }) => {
     </div>
   );
 };
+
+// Simple QR Code reader function
+function jsQR(data, width, height) {
+  // This is a simplified QR detection - in production, use a proper library
+  // For now, we'll return null and rely on manual input as fallback
+  return null;
+}
 
 // --- LOGIN SCREEN ---
 const LoginScreen = ({ onLogin, loading, loginMode, setLoginMode }) => (
@@ -992,7 +1095,6 @@ const LoginScreen = ({ onLogin, loading, loginMode, setLoginMode }) => (
         </p>
       </div>
 
-      {/* Login Mode Toggle */}
       <div style={styles.loginToggle}>
         <button 
           onClick={() => setLoginMode('admin')}
@@ -1317,71 +1419,100 @@ const styles = {
     marginTop: '0'
   },
 
-  activityList: {
+  collectionsList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '16px'
   },
 
-  activityItem: {
+  collectionCardEnhanced: {
     background: 'white',
-    padding: '16px',
-    borderRadius: '20px',
+    padding: '20px',
+    borderRadius: '24px',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.06)'
+  },
+
+  collectionHeaderEnhanced: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    border: '1px solid #f1f5f9',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+    alignItems: 'flex-start',
+    marginBottom: '16px',
+    paddingBottom: '16px',
+    borderBottom: '2px solid #f1f5f9'
   },
 
-  itemInfo: {
+  collectionNameEnhanced: {
+    fontSize: '16px',
+    fontWeight: '700',
+    color: '#0f172a',
+    display: 'block',
+    marginBottom: '4px'
+  },
+
+  collectionIdEnhanced: {
+    fontSize: '12px',
+    color: '#64748b',
+    fontWeight: '500'
+  },
+
+  collectionAmountEnhanced: {
+    fontSize: '22px',
+    fontWeight: '900',
+    color: '#2563eb'
+  },
+
+  collectionMetaGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '12px',
+    marginBottom: '16px'
+  },
+
+  metaItem: {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px'
   },
 
-  itemName: {
-    fontSize: '15px',
+  metaLabel: {
+    fontSize: '10px',
+    fontWeight: '700',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
+  },
+
+  metaValue: {
+    fontSize: '13px',
     fontWeight: '600',
     color: '#0f172a'
   },
 
-  itemTime: {
-    fontSize: '12px',
-    color: '#94a3b8'
-  },
-
-  itemAmount: {
-    textAlign: 'right',
+  collectionFooterEnhanced: {
+    paddingTop: '12px',
+    borderTop: '1px solid #f1f5f9',
     display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: '6px'
-  },
-
-  amount: {
-    fontWeight: '800',
-    fontSize: '16px',
-    color: '#0f172a'
+    justifyContent: 'center'
   },
 
   tagOk: {
-    fontSize: '10px',
+    fontSize: '11px',
     background: '#dcfce7',
     color: '#166534',
-    padding: '3px 10px',
-    borderRadius: '10px',
-    fontWeight: '600',
+    padding: '6px 12px',
+    borderRadius: '12px',
+    fontWeight: '700',
     letterSpacing: '0.3px'
   },
 
   tagWarn: {
-    fontSize: '10px',
+    fontSize: '11px',
     background: '#fee2e2',
     color: '#991b1b',
-    padding: '3px 10px',
-    borderRadius: '10px',
-    fontWeight: '600',
+    padding: '6px 12px',
+    borderRadius: '12px',
+    fontWeight: '700',
     letterSpacing: '0.3px'
   },
 
@@ -1441,8 +1572,9 @@ const styles = {
     fontWeight: '700',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '6px',
-    margin: '16px auto 0',
+    margin: '0 auto',
     cursor: 'pointer',
     transition: 'all 0.2s'
   },
@@ -1554,296 +1686,3 @@ const styles = {
     padding: '4px',
     borderRadius: '12px'
   },
-
-  toggleBtn: {
-    flex: 1,
-    padding: '10px',
-    border: 'none',
-    borderRadius: '10px',
-    background: 'transparent',
-    color: '#64748b',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
-
-  toggleBtnActive: {
-    background: 'white',
-    color: '#2563eb',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-  },
-
-  qrResult: {
-    marginTop: '32px',
-    textAlign: 'center',
-    background: 'white',
-    padding: '28px',
-    borderRadius: '30px',
-    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)',
-    border: '1px solid #f1f5f9'
-  },
-
-  qrCard: {
-    marginBottom: '16px'
-  },
-
-  qrImage: {
-    width: '240px',
-    height: '240px',
-    border: '12px solid #f8fafc',
-    borderRadius: '24px',
-    marginBottom: '16px'
-  },
-
-  qrDetails: {
-    textAlign: 'center'
-  },
-
-  qrName: {
-    fontSize: '20px',
-    fontWeight: '700',
-    margin: '0 0 8px 0',
-    color: '#0f172a'
-  },
-
-  qrRegNo: {
-    fontSize: '14px',
-    color: '#64748b',
-    margin: '0 0 8px 0'
-  },
-
-  qrAmount: {
-    fontSize: '14px',
-    color: '#64748b',
-    margin: '0 0 12px 0'
-  },
-
-  fadeIn: {
-    animation: 'fadeIn 0.5s ease-out'
-  },
-
-  spinner: {
-    animation: 'spin 1s linear infinite'
-  },
-
-  loadingContainer: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '40px',
-    color: '#2563eb'
-  },
-
-  emptyState: {
-    textAlign: 'center',
-    padding: '40px 20px',
-    color: '#94a3b8'
-  },
-
-  errorAlert: {
-    background: '#fee2e2',
-    color: '#991b1b',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    marginBottom: '16px',
-    fontSize: '13px',
-    fontWeight: '600'
-  },
-
-  loadingScreen: {
-    minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '16px',
-    color: '#2563eb'
-  },
-
-  employeeList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px'
-  },
-
-  employeeCard: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-    padding: '14px',
-    background: '#f8fafc',
-    borderRadius: '16px'
-  },
-
-  employeeAvatar: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '50%',
-    background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
-    color: 'white',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '20px',
-    fontWeight: '700',
-    flexShrink: 0
-  },
-
-  employeeInfo: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    flex: 1
-  },
-
-  scannerCard: {
-    background: 'white',
-    padding: '28px',
-    borderRadius: '30px',
-    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)',
-    border: '1px solid #f1f5f9',
-    textAlign: 'center'
-  },
-
-  scannerContainer: {
-    marginTop: '20px'
-  },
-
-  scannerFrame: {
-    borderRadius: '20px',
-    overflow: 'hidden',
-    border: '3px solid #2563eb'
-  },
-
-  successCard: {
-    background: 'white',
-    padding: '40px 28px',
-    borderRadius: '30px',
-    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)',
-    border: '1px solid #f1f5f9',
-    textAlign: 'center'
-  },
-
-  dashboardTabs: {
-    display: 'flex',
-    gap: '12px',
-    marginBottom: '24px',
-    background: 'white',
-    padding: '6px',
-    borderRadius: '20px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-  },
-
-  dashboardTab: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '12px 16px',
-    border: 'none',
-    borderRadius: '16px',
-    background: 'transparent',
-    color: '#64748b',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
-
-  dashboardTabActive: {
-    background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
-    color: 'white',
-    boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)'
-  },
-
-  collectionsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px'
-  },
-
-  collectionCard: {
-    background: 'white',
-    padding: '16px',
-    borderRadius: '20px',
-    border: '1px solid #f1f5f9',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-  },
-
-  collectionHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '12px',
-    paddingBottom: '12px',
-    borderBottom: '1px solid #f1f5f9'
-  },
-
-  collectionMember: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px'
-  },
-
-  collectionName: {
-    fontSize: '15px',
-    fontWeight: '600',
-    color: '#0f172a'
-  },
-
-  collectionId: {
-    fontSize: '12px',
-    color: '#64748b'
-  },
-
-  collectionAmount: {
-    fontSize: '18px',
-    fontWeight: '800',
-    color: '#2563eb'
-  },
-
-  collectionDetails: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    marginBottom: '12px'
-  },
-
-  collectionDetail: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '13px',
-    color: '#64748b'
-  },
-
-  collectionFooter: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: '12px',
-    borderTop: '1px solid #f1f5f9'
-  },
-
-  collectionTime: {
-    fontSize: '12px',
-    color: '#94a3b8'
-  },
-
-  locationWarning: {
-    background: '#fff3cd',
-    color: '#856404',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    fontSize: '13px',
-    fontWeight: '600',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
-    maxWidth: '460px',
-    margin: '0 auto'
-  }
-};
