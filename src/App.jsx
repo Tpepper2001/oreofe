@@ -135,9 +135,34 @@ const OwnerDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [qrCodes, setQrCodes] = useState({});
+  const [dashboardView, setDashboardView] = useState('members'); // 'members' or 'collections'
+  const [collections, setCollections] = useState([]);
+  const [stats, setStats] = useState({
+    totalCollections: 0,
+    totalAmount: 0,
+    todayCollections: 0,
+    todayAmount: 0,
+    verifiedCount: 0,
+    remoteCount: 0
+  });
 
   useEffect(() => {
     loadMembers();
+    loadCollections();
+    
+    // Subscribe to real-time collection updates
+    const sub = supabase
+      .channel('collections-channel')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'transactions' 
+      }, () => {
+        loadCollections();
+      })
+      .subscribe();
+    
+    return () => supabase.removeChannel(sub);
   }, []);
 
   const loadMembers = async () => {
@@ -165,9 +190,48 @@ const OwnerDashboard = () => {
     setLoading(false);
   };
 
+  const loadCollections = async () => {
+    const { data } = await supabase
+      .from('transactions')
+      .select(`
+        *,
+        contributors(full_name, registration_no, phone_number),
+        employees(full_name, employee_id_number)
+      `)
+      .eq('ajo_owner_id', 'admin')
+      .order('created_at', { ascending: false });
+    
+    if (data) {
+      setCollections(data);
+      
+      // Calculate statistics
+      const totalAmount = data.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      const today = new Date().toISOString().split('T')[0];
+      const todayTxs = data.filter(t => t.created_at.startsWith(today));
+      const todayAmount = todayTxs.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      const verifiedCount = data.filter(t => t.geofence_verified).length;
+      const remoteCount = data.filter(t => !t.geofence_verified).length;
+
+      setStats({
+        totalCollections: data.length,
+        totalAmount,
+        todayCollections: todayTxs.length,
+        todayAmount,
+        verifiedCount,
+        remoteCount
+      });
+    }
+  };
+
   const filteredMembers = members.filter(m => 
     m.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     m.registration_no.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredCollections = collections.filter(c =>
+    c.contributors?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.employees?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.contributors?.registration_no.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const printMemberCard = (member) => {
@@ -202,111 +266,258 @@ const OwnerDashboard = () => {
     printWindow.print();
   };
 
-  if (selectedMember) {
-    return (
-      <div style={styles.fadeIn}>
-        <button onClick={() => setSelectedMember(null)} style={styles.backBtn}>
-          ← Back to Members
-        </button>
-        <div style={styles.memberDetailCard}>
-          <div style={styles.qrSection}>
-            {qrCodes[selectedMember.id] && (
-              <img src={qrCodes[selectedMember.id]} alt="QR" style={styles.qrImageLarge} />
-            )}
-          </div>
-          <h2 style={styles.memberName}>{selectedMember.full_name}</h2>
-          <div style={styles.memberInfoGrid}>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Registration No</span>
-              <span style={styles.infoValue}>{selectedMember.registration_no}</span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Phone Number</span>
-              <span style={styles.infoValue}>{selectedMember.phone_number}</span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Address</span>
-              <span style={styles.infoValue}>{selectedMember.address}</span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Daily Amount</span>
-              <span style={styles.infoValue}>₦{Number(selectedMember.expected_amount).toLocaleString()}</span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Current Balance</span>
-              <span style={styles.infoValue}>₦{Number(selectedMember.current_balance).toLocaleString()}</span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Total Contributed</span>
-              <span style={styles.infoValue}>₦{Number(selectedMember.total_contributed).toLocaleString()}</span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Status</span>
-              <span style={{...styles.tagOk, display: 'inline-block'}}>{selectedMember.status}</span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Joined</span>
-              <span style={styles.infoValue}>{new Date(selectedMember.created_at).toLocaleDateString()}</span>
-            </div>
-          </div>
-          <button onClick={() => printMemberCard(selectedMember)} style={styles.btnPrimary}>
-            <Printer size={18} />
-            <span style={{marginLeft: 8}}>Print ID Card</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={styles.fadeIn}>
-      <div style={styles.searchBar}>
-        <Search size={20} style={{color: '#94a3b8', position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)'}} />
-        <input 
-          type="text"
-          placeholder="Search members by name or ID..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={styles.searchInput}
-        />
+      {/* Dashboard Navigation Tabs */}
+      <div style={styles.dashboardTabs}>
+        <button
+          onClick={() => setDashboardView('members')}
+          style={{
+            ...styles.dashboardTab,
+            ...(dashboardView === 'members' ? styles.dashboardTabActive : {})
+          }}
+        >
+          <Users size={18} />
+          <span>Members</span>
+        </button>
+        <button
+          onClick={() => setDashboardView('collections')}
+          style={{
+            ...styles.dashboardTab,
+            ...(dashboardView === 'collections' ? styles.dashboardTabActive : {})
+          }}
+        >
+          <TrendingUp size={18} />
+          <span>Collections</span>
+        </button>
       </div>
 
-      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
-        <h3 style={styles.sectionTitle}>ALL MEMBERS ({filteredMembers.length})</h3>
-      </div>
-
-      {loading ? (
-        <div style={styles.loadingContainer}>
-          <Loader2 size={32} style={styles.spinner} />
-        </div>
-      ) : filteredMembers.length === 0 ? (
-        <div style={styles.emptyState}>
-          <Users size={48} style={{color: '#94a3b8'}} />
-          <p>No members found</p>
-        </div>
-      ) : (
-        <div style={styles.membersList}>
-          {filteredMembers.map(member => (
-            <div key={member.id} style={styles.memberCard} onClick={() => setSelectedMember(member)}>
-              <div style={styles.memberCardLeft}>
-                {qrCodes[member.id] && (
-                  <img src={qrCodes[member.id]} alt="QR" style={styles.qrThumbnail} />
-                )}
-              </div>
-              <div style={styles.memberCardCenter}>
-                <strong style={styles.memberCardName}>{member.full_name}</strong>
-                <span style={styles.memberCardId}>{member.registration_no}</span>
-                <span style={styles.memberCardPhone}>{member.phone_number}</span>
-              </div>
-              <div style={styles.memberCardRight}>
-                <div style={styles.memberAmount}>₦{Number(member.expected_amount).toLocaleString()}</div>
-                <span style={styles.memberBalance}>Bal: ₦{Number(member.current_balance).toLocaleString()}</span>
-                <Eye size={16} style={{color: '#2563eb', marginTop: 8}} />
-              </div>
+      {/* Collections View */}
+      {dashboardView === 'collections' && (
+        <>
+          {/* Collection Statistics */}
+          <div style={styles.statsGrid}>
+            <div style={{...styles.statCard, ...styles.statCardPrimary}}>
+              <p style={styles.statCardLabel}>Today's Total</p>
+              <h2 style={styles.statCardValue}>₦{stats.todayAmount.toLocaleString()}</h2>
+              <span style={{fontSize: 11, opacity: 0.8}}>{stats.todayCollections} collections</span>
             </div>
-          ))}
-        </div>
+            <div style={styles.statCard}>
+              <p style={styles.statCardLabel}>All-Time Total</p>
+              <h2 style={styles.statCardValue}>₦{(stats.totalAmount / 1000).toFixed(1)}K</h2>
+              <span style={{fontSize: 11, color: '#64748b'}}>{stats.totalCollections} total</span>
+            </div>
+          </div>
+
+          <div style={styles.statsGrid}>
+            <div style={styles.statCard}>
+              <p style={styles.statCardLabel}>Verified</p>
+              <h2 style={styles.statCardValue}>{stats.verifiedCount}</h2>
+              <span style={{...styles.tagOk, fontSize: 9, display: 'inline-block', marginTop: 4}}>
+                ✓ On Location
+              </span>
+            </div>
+            <div style={styles.statCard}>
+              <p style={styles.statCardLabel}>Remote</p>
+              <h2 style={styles.statCardValue}>{stats.remoteCount}</h2>
+              <span style={{...styles.tagWarn, fontSize: 9, display: 'inline-block', marginTop: 4}}>
+                ⚠ Off Location
+              </span>
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div style={styles.searchBar}>
+            <Search size={20} style={{color: '#94a3b8', position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)'}} />
+            <input 
+              type="text"
+              placeholder="Search collections by member or agent..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={styles.searchInput}
+            />
+          </div>
+
+          <h3 style={styles.sectionTitle}>COLLECTION HISTORY ({filteredCollections.length})</h3>
+
+          {loading ? (
+            <div style={styles.loadingContainer}>
+              <Loader2 size={32} style={styles.spinner} />
+            </div>
+          ) : filteredCollections.length === 0 ? (
+            <div style={styles.emptyState}>
+              <AlertCircle size={48} style={{color: '#94a3b8'}} />
+              <p>No collections found</p>
+            </div>
+          ) : (
+            <div style={styles.collectionsList}>
+              {filteredCollections.map(collection => (
+                <div key={collection.id} style={styles.collectionCard}>
+                  <div style={styles.collectionHeader}>
+                    <div style={styles.collectionMember}>
+                      <strong style={styles.collectionName}>
+                        {collection.contributors?.full_name || 'Unknown'}
+                      </strong>
+                      <span style={styles.collectionId}>
+                        {collection.contributors?.registration_no}
+                      </span>
+                    </div>
+                    <div style={styles.collectionAmount}>
+                      ₦{Number(collection.amount).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <div style={styles.collectionDetails}>
+                    <div style={styles.collectionDetail}>
+                      <Users size={14} style={{color: '#64748b'}} />
+                      <span>Agent: {collection.employees?.full_name || 'N/A'}</span>
+                    </div>
+                    <div style={styles.collectionDetail}>
+                      <MapPin size={14} style={{color: '#64748b'}} />
+                      <span>
+                        {collection.distance_from_registered 
+                          ? `${collection.distance_from_registered}m away` 
+                          : 'Location N/A'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={styles.collectionFooter}>
+                    <span style={styles.collectionTime}>
+                      {new Date(collection.created_at).toLocaleDateString()} • {' '}
+                      {new Date(collection.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </span>
+                    <span style={collection.geofence_verified ? styles.tagOk : styles.tagWarn}>
+                      {collection.geofence_verified ? '✓ Verified' : '⚠ Remote'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
+
+      {/* Members View */}
+      {dashboardView === 'members' && (
+        <>
+          {selectedMember ? (
+            <MemberDetailView 
+              member={selectedMember} 
+              qrCode={qrCodes[selectedMember.id]}
+              onBack={() => setSelectedMember(null)}
+              printMemberCard={printMemberCard}
+            />
+          ) : (
+            <>
+              <div style={styles.searchBar}>
+                <Search size={20} style={{color: '#94a3b8', position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)'}} />
+                <input 
+                  type="text"
+                  placeholder="Search members by name or ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={styles.searchInput}
+                />
+              </div>
+
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
+                <h3 style={styles.sectionTitle}>ALL MEMBERS ({filteredMembers.length})</h3>
+              </div>
+
+              {loading ? (
+                <div style={styles.loadingContainer}>
+                  <Loader2 size={32} style={styles.spinner} />
+                </div>
+              ) : filteredMembers.length === 0 ? (
+                <div style={styles.emptyState}>
+                  <Users size={48} style={{color: '#94a3b8'}} />
+                  <p>No members found</p>
+                </div>
+              ) : (
+                <div style={styles.membersList}>
+                  {filteredMembers.map(member => (
+                    <div key={member.id} style={styles.memberCard} onClick={() => setSelectedMember(member)}>
+                      <div style={styles.memberCardLeft}>
+                        {qrCodes[member.id] && (
+                          <img src={qrCodes[member.id]} alt="QR" style={styles.qrThumbnail} />
+                        )}
+                      </div>
+                      <div style={styles.memberCardCenter}>
+                        <strong style={styles.memberCardName}>{member.full_name}</strong>
+                        <span style={styles.memberCardId}>{member.registration_no}</span>
+                        <span style={styles.memberCardPhone}>{member.phone_number}</span>
+                      </div>
+                      <div style={styles.memberCardRight}>
+                        <div style={styles.memberAmount}>₦{Number(member.expected_amount).toLocaleString()}</div>
+                        <span style={styles.memberBalance}>Bal: ₦{Number(member.current_balance).toLocaleString()}</span>
+                        <Eye size={16} style={{color: '#2563eb', marginTop: 8}} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
+// --- MEMBER DETAIL VIEW COMPONENT ---
+const MemberDetailView = ({ member, qrCode, onBack, printMemberCard }) => {
+  return (
+    <div style={styles.fadeIn}>
+      <button onClick={onBack} style={styles.backBtn}>
+        ← Back to Members
+      </button>
+      <div style={styles.memberDetailCard}>
+        <div style={styles.qrSection}>
+          {qrCode && (
+            <img src={qrCode} alt="QR" style={styles.qrImageLarge} />
+          )}
+        </div>
+        <h2 style={styles.memberName}>{member.full_name}</h2>
+        <div style={styles.memberInfoGrid}>
+          <div style={styles.infoItem}>
+            <span style={styles.infoLabel}>Registration No</span>
+            <span style={styles.infoValue}>{member.registration_no}</span>
+          </div>
+          <div style={styles.infoItem}>
+            <span style={styles.infoLabel}>Phone Number</span>
+            <span style={styles.infoValue}>{member.phone_number}</span>
+          </div>
+          <div style={styles.infoItem}>
+            <span style={styles.infoLabel}>Address</span>
+            <span style={styles.infoValue}>{member.address}</span>
+          </div>
+          <div style={styles.infoItem}>
+            <span style={styles.infoLabel}>Daily Amount</span>
+            <span style={styles.infoValue}>₦{Number(member.expected_amount).toLocaleString()}</span>
+          </div>
+          <div style={styles.infoItem}>
+            <span style={styles.infoLabel}>Current Balance</span>
+            <span style={styles.infoValue}>₦{Number(member.current_balance).toLocaleString()}</span>
+          </div>
+          <div style={styles.infoItem}>
+            <span style={styles.infoLabel}>Total Contributed</span>
+            <span style={styles.infoValue}>₦{Number(member.total_contributed).toLocaleString()}</span>
+          </div>
+          <div style={styles.infoItem}>
+            <span style={styles.infoLabel}>Status</span>
+            <span style={{...styles.tagOk, display: 'inline-block'}}>{member.status}</span>
+          </div>
+          <div style={styles.infoItem}>
+            <span style={styles.infoLabel}>Joined</span>
+            <span style={styles.infoValue}>{new Date(member.created_at).toLocaleDateString()}</span>
+          </div>
+        </div>
+        <button onClick={() => printMemberCard(member)} style={styles.btnPrimary}>
+          <Printer size={18} />
+          <span style={{marginLeft: 8}}>Print ID Card</span>
+        </button>
+      </div>
     </div>
   );
 };
@@ -1483,5 +1694,112 @@ const styles = {
     boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)',
     border: '1px solid #f1f5f9',
     textAlign: 'center'
+  },
+
+  dashboardTabs: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '24px',
+    background: 'white',
+    padding: '6px',
+    borderRadius: '20px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+  },
+
+  dashboardTab: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '12px 16px',
+    border: 'none',
+    borderRadius: '16px',
+    background: 'transparent',
+    color: '#64748b',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+
+  dashboardTabActive: {
+    background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
+    color: 'white',
+    boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)'
+  },
+
+  collectionsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+
+  collectionCard: {
+    background: 'white',
+    padding: '16px',
+    borderRadius: '20px',
+    border: '1px solid #f1f5f9',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+  },
+
+  collectionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '12px',
+    paddingBottom: '12px',
+    borderBottom: '1px solid #f1f5f9'
+  },
+
+  collectionMember: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px'
+  },
+
+  collectionName: {
+    fontSize: '15px',
+    fontWeight: '600',
+    color: '#0f172a'
+  },
+
+  collectionId: {
+    fontSize: '12px',
+    color: '#64748b'
+  },
+
+  collectionAmount: {
+    fontSize: '18px',
+    fontWeight: '800',
+    color: '#2563eb'
+  },
+
+  collectionDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    marginBottom: '12px'
+  },
+
+  collectionDetail: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '13px',
+    color: '#64748b'
+  },
+
+  collectionFooter: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: '12px',
+    borderTop: '1px solid #f1f5f9'
+  },
+
+  collectionTime: {
+    fontSize: '12px',
+    color: '#94a3b8'
   }
 };
