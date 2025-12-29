@@ -21,14 +21,7 @@ export default function App() {
   const [view, setView] = useState('dashboard');
   const [userLocation, setUserLocation] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  // Check URL path for agent login
-  useEffect(() => {
-    const path = window.location.pathname;
-    if (path === '/agent') {
-      // Agent login detected
-    }
-  }, []);
+  const [loginMode, setLoginMode] = useState('admin'); // 'admin' or 'agent'
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -36,29 +29,35 @@ export default function App() {
     const username = e.target.username.value;
     const password = e.target.password.value;
 
-    // Hardcoded admin login
-    if (username === 'oreofe' && password === 'oreofe') {
-      const ownerData = { id: 'admin', full_name: 'Oreofe Owner', role: 'admin', ajo_owner_id: 'admin' };
-      setUser({ id: 'admin' });
-      setProfile(ownerData);
-      setLoading(false);
-      return;
-    }
-
-    // Employee login - check employees table
-    const { data: employee } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('employee_id_number', username)
-      .eq('password', password)
-      .single();
-
-    setLoading(false);
-    if (employee) {
-      setUser({ id: employee.id });
-      setProfile({ ...employee, role: 'employee' });
+    if (loginMode === 'admin') {
+      // Admin login
+      if (username === 'oreofe' && password === 'oreofe') {
+        const ownerData = { id: 'admin', full_name: 'Oreofe Owner', role: 'admin', ajo_owner_id: 'admin' };
+        setUser({ id: 'admin' });
+        setProfile(ownerData);
+        setLoading(false);
+        return;
+      } else {
+        alert("Access Denied: Invalid admin credentials");
+        setLoading(false);
+        return;
+      }
     } else {
-      alert("Access Denied: Invalid credentials");
+      // Employee/Agent login
+      const { data: employee } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('employee_id_number', username)
+        .eq('password', password)
+        .single();
+
+      setLoading(false);
+      if (employee) {
+        setUser({ id: employee.id });
+        setProfile({ ...employee, role: 'employee' });
+      } else {
+        alert("Access Denied: Invalid employee credentials");
+      }
     }
   };
 
@@ -68,7 +67,7 @@ export default function App() {
     setView('dashboard');
   };
 
-  if (!user) return <LoginScreen onLogin={handleLogin} loading={loading} />;
+  if (!user) return <LoginScreen onLogin={handleLogin} loading={loading} loginMode={loginMode} setLoginMode={setLoginMode} />;
 
   return (
     <div style={styles.appContainer}>
@@ -742,18 +741,43 @@ const LocationGate = ({ children, onLocationUpdate }) => {
 };
 
 // --- LOGIN SCREEN ---
-const LoginScreen = ({ onLogin, loading }) => (
+const LoginScreen = ({ onLogin, loading, loginMode, setLoginMode }) => (
   <div style={styles.loginPage}>
     <div style={styles.loginCard}>
       <div style={styles.loginHeader}>
         <Landmark size={48} style={styles.loginIcon} />
         <h2 style={styles.loginTitle}>AJO-PRO</h2>
-        <p style={styles.loginSubtitle}>Secure Collection System</p>
+        <p style={styles.loginSubtitle}>
+          {loginMode === 'admin' ? 'Admin Dashboard' : 'Field Agent Login'}
+        </p>
       </div>
+
+      {/* Login Mode Toggle */}
+      <div style={styles.loginToggle}>
+        <button 
+          onClick={() => setLoginMode('admin')}
+          style={{
+            ...styles.toggleBtn,
+            ...(loginMode === 'admin' ? styles.toggleBtnActive : {})
+          }}
+        >
+          Admin
+        </button>
+        <button 
+          onClick={() => setLoginMode('agent')}
+          style={{
+            ...styles.toggleBtn,
+            ...(loginMode === 'agent' ? styles.toggleBtnActive : {})
+          }}
+        >
+          Agent
+        </button>
+      </div>
+
       <form onSubmit={onLogin} style={styles.loginForm}>
         <input 
           name="username" 
-          placeholder="Username / Employee ID" 
+          placeholder={loginMode === 'admin' ? 'Admin Username' : 'Employee ID'} 
           required 
           style={styles.input}
           autoComplete="username"
@@ -780,9 +804,6 @@ const LoginScreen = ({ onLogin, loading }) => (
           )}
         </button>
       </form>
-      <p style={{marginTop: 20, fontSize: 12, color: '#94a3b8'}}>
-        Employees login at: /agent
-      </p>
     </div>
   </div>
 );
@@ -1283,6 +1304,34 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '14px'
+  },
+
+  loginToggle: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '24px',
+    background: '#f1f5f9',
+    padding: '4px',
+    borderRadius: '12px'
+  },
+
+  toggleBtn: {
+    flex: 1,
+    padding: '10px',
+    border: 'none',
+    borderRadius: '10px',
+    background: 'transparent',
+    color: '#64748b',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+
+  toggleBtnActive: {
+    background: 'white',
+    color: '#2563eb',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
   },
 
   qrResult: {
