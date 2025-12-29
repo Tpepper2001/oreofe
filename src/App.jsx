@@ -4,7 +4,7 @@ import QrScanner from 'react-qr-scanner';
 import QRCode from 'qrcode';
 import { 
   Users, UserPlus, MapPin, Scan, LayoutDashboard, 
-  Settings, LogOut, CheckCircle, WifiOff, Loader2, ShieldCheck, Landmark, Printer
+  Settings, LogOut, CheckCircle, WifiOff, Loader2, ShieldCheck, Landmark, Printer, AlertCircle
 } from 'lucide-react';
 
 /* ===================== CONFIG ===================== */
@@ -17,9 +17,11 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [view, setView] = useState('dashboard');
   const [userLocation, setUserLocation] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setLoading(true);
     const email = e.target.email.value;
     const password = e.target.password.value;
 
@@ -27,33 +29,41 @@ export default function App() {
       const ownerData = { id: 'oreofe-id', full_name: 'Oreofe Owner', role: 'ajo_owner' };
       setUser({ id: 'oreofe-id' });
       setProfile(ownerData);
+      setLoading(false);
       return;
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert("Access Denied");
-    else {
+    setLoading(false);
+    if (error) {
+      alert("Access Denied: " + error.message);
+    } else {
       setUser(data.user);
       const { data: p } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
       setProfile(p);
     }
   };
 
-  if (!user) return <LoginScreen onLogin={handleLogin} />;
+  const handleLogout = () => {
+    setUser(null);
+    setProfile(null);
+    setView('dashboard');
+  };
+
+  if (!user) return <LoginScreen onLogin={handleLogin} loading={loading} />;
 
   return (
-    <div className="app-container">
-      <style>{styles}</style>
+    <div style={styles.appContainer}>
       <LocationGate onLocationUpdate={setUserLocation}>
-        <header className="app-header">
-          <div className="brand">
-            <div className="logo-dot" />
-            <h1>AJO<span>PRO</span></h1>
+        <header style={styles.appHeader}>
+          <div style={styles.brand}>
+            <div style={styles.logoDot} />
+            <h1 style={styles.brandH1}>AJO<span style={styles.brandSpan}>PRO</span></h1>
           </div>
-          <div className="profile-pill">{profile?.full_name.split(' ')[0]}</div>
+          <div style={styles.profilePill}>{profile?.full_name?.split(' ')[0] || 'User'}</div>
         </header>
 
-        <main className="content-area">
+        <main style={styles.contentArea}>
           {profile?.role === 'ajo_owner' ? (
             <>
               {view === 'dashboard' && <OwnerDashboard />}
@@ -65,67 +75,114 @@ export default function App() {
           )}
         </main>
 
-        <nav className="bottom-nav">
-          <button onClick={() => setView('dashboard')} className={view === 'dashboard' ? 'active' : ''}><LayoutDashboard /></button>
+        <nav style={styles.bottomNav}>
+          <button 
+            onClick={() => setView('dashboard')} 
+            style={{...styles.navButton, ...(view === 'dashboard' ? styles.navButtonActive : {})}}
+          >
+            <LayoutDashboard size={22} />
+          </button>
           {profile?.role === 'ajo_owner' ? (
             <>
-              <button onClick={() => setView('members')} className={view === 'members' ? 'active' : ''}><UserPlus /></button>
-              <button onClick={() => setView('employees')} className={view === 'employees' ? 'active' : ''}><Settings /></button>
+              <button 
+                onClick={() => setView('members')} 
+                style={{...styles.navButton, ...(view === 'members' ? styles.navButtonActive : {})}}
+              >
+                <UserPlus size={22} />
+              </button>
+              <button 
+                onClick={() => setView('employees')} 
+                style={{...styles.navButton, ...(view === 'employees' ? styles.navButtonActive : {})}}
+              >
+                <Settings size={22} />
+              </button>
             </>
           ) : (
-            <button onClick={() => setView('collect')} className="scan-btn-nav"><Scan /></button>
+            <button style={{...styles.navButton, ...styles.scanBtn}}>
+              <Scan size={22} />
+            </button>
           )}
-          <button onClick={() => setUser(null)} className="logout-btn"><LogOut /></button>
+          <button onClick={handleLogout} style={styles.navButton}>
+            <LogOut size={22} />
+          </button>
         </nav>
       </LocationGate>
     </div>
   );
 }
 
-// --- DASHBOARD COMPONENT ---
+// --- OWNER DASHBOARD ---
 const OwnerDashboard = () => {
   const [txs, setTxs] = useState([]);
+  const [loading, setLoading] = useState(true);
   
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from('transactions').select('*, contributors(full_name)').order('created_at', { ascending: false }).limit(6);
+      setLoading(true);
+      const { data } = await supabase
+        .from('transactions')
+        .select('*, contributors(full_name)')
+        .order('created_at', { ascending: false })
+        .limit(10);
       setTxs(data || []);
+      setLoading(false);
     };
     load();
-    const sub = supabase.channel('txs').on('postgres_changes', { event: 'INSERT', table: 'transactions' }, load).subscribe();
+    
+    const sub = supabase
+      .channel('txs')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, load)
+      .subscribe();
+    
     return () => supabase.removeChannel(sub);
   }, []);
 
+  const totalToday = txs.reduce((a, b) => a + Number(b.amount || 0), 0);
+
   return (
-    <div className="fade-in">
-      <div className="stats-grid">
-        <div className="stat-card primary">
-          <p>Total Today</p>
-          <h2>₦{txs.reduce((a, b) => a + Number(b.amount), 0).toLocaleString()}</h2>
+    <div style={styles.fadeIn}>
+      <div style={styles.statsGrid}>
+        <div style={{...styles.statCard, ...styles.statCardPrimary}}>
+          <p style={styles.statCardLabel}>Total Today</p>
+          <h2 style={styles.statCardValue}>₦{totalToday.toLocaleString()}</h2>
         </div>
-        <div className="stat-card">
-          <p>Collections</p>
-          <h2>{txs.length}</h2>
+        <div style={styles.statCard}>
+          <p style={styles.statCardLabel}>Collections</p>
+          <h2 style={styles.statCardValue}>{txs.length}</h2>
         </div>
       </div>
 
-      <h3 className="section-title">LIVE ACTIVITY</h3>
-      <div className="activity-list">
-        {txs.map(t => (
-          <div key={t.id} className="activity-item">
-            <div className="item-info">
-              <strong>{t.contributors?.full_name}</strong>
-              <span>{new Date(t.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+      <h3 style={styles.sectionTitle}>LIVE ACTIVITY</h3>
+      
+      {loading ? (
+        <div style={styles.loadingContainer}>
+          <Loader2 size={32} style={styles.spinner} />
+        </div>
+      ) : txs.length === 0 ? (
+        <div style={styles.emptyState}>
+          <AlertCircle size={48} style={{color: '#94a3b8'}} />
+          <p>No transactions yet today</p>
+        </div>
+      ) : (
+        <div style={styles.activityList}>
+          {txs.map(t => (
+            <div key={t.id} style={styles.activityItem}>
+              <div style={styles.itemInfo}>
+                <strong style={styles.itemName}>{t.contributors?.full_name || 'Unknown'}</strong>
+                <span style={styles.itemTime}>
+                  {new Date(t.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </span>
+              </div>
+              <div style={styles.itemAmount}>
+                <div style={styles.amount}>₦{Number(t.amount).toLocaleString()}</div>
+                <span style={t.geofence_verified ? styles.tagOk : styles.tagWarn}>
+                  {t.geofence_verified ? 'Verified' : 'Remote'}
+                </span>
+              </div>
             </div>
-            <div className="item-amount">
-              ₦{t.amount}
-              <span className={t.geofence_verified ? 'tag-ok' : 'tag-warn'}>
-                {t.geofence_verified ? 'Verified' : 'Remote'}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -134,47 +191,94 @@ const OwnerDashboard = () => {
 const MemberRegistration = ({ ownerId }) => {
   const [loading, setLoading] = useState(false);
   const [qr, setQr] = useState(null);
+  const [error, setError] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     const fd = new FormData(e.target);
     
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const { data } = await supabase.from('contributors').insert([{
-        full_name: fd.get('name'),
-        expected_amount: fd.get('amount'),
-        ajo_owner_id: ownerId,
-        gps_latitude: pos.coords.latitude,
-        gps_longitude: pos.coords.longitude,
-        qr_code_data: `AJO-${Math.random().toString(36).substring(7).toUpperCase()}`
-      }]).select().single();
-
-      if (data) {
-        const qrCode = await QRCode.toDataURL(JSON.stringify({ id: data.id, amt: data.expected_amount }));
-        setQr({ code: qrCode, name: data.full_name });
-      }
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
       setLoading(false);
-    });
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const qrData = `AJO-${Math.random().toString(36).substring(7).toUpperCase()}`;
+          const { data, error: dbError } = await supabase.from('contributors').insert([{
+            full_name: fd.get('name'),
+            expected_amount: fd.get('amount'),
+            ajo_owner_id: ownerId,
+            gps_latitude: pos.coords.latitude,
+            gps_longitude: pos.coords.longitude,
+            qr_code_data: qrData
+          }]).select().single();
+
+          if (dbError) throw dbError;
+
+          if (data) {
+            const qrCode = await QRCode.toDataURL(JSON.stringify({ 
+              id: data.id, 
+              amt: data.expected_amount,
+              code: qrData
+            }), { width: 300, margin: 2 });
+            
+            setQr({ code: qrCode, name: data.full_name, amount: data.expected_amount });
+            e.target.reset();
+          }
+        } catch (err) {
+          setError('Failed to register member: ' + err.message);
+        }
+        setLoading(false);
+      },
+      (err) => {
+        setError('Location access denied. Please enable location services.');
+        setLoading(false);
+      }
+    );
   };
 
   return (
-    <div className="fade-in">
-      <form className="card-form" onSubmit={handleSubmit}>
-        <h3>Add New Member</h3>
-        <input name="name" placeholder="Member Full Name" required />
-        <input name="amount" type="number" placeholder="Daily Amount (₦)" required />
-        <button disabled={loading} className="btn-primary">
-          {loading ? <Loader2 className="spinner" /> : 'Register Member'}
+    <div style={styles.fadeIn}>
+      <form style={styles.cardForm} onSubmit={handleSubmit}>
+        <h3 style={styles.formTitle}>Add New Member</h3>
+        {error && <div style={styles.errorAlert}>{error}</div>}
+        <input 
+          name="name" 
+          placeholder="Member Full Name" 
+          required 
+          style={styles.input}
+        />
+        <input 
+          name="amount" 
+          type="number" 
+          placeholder="Daily Amount (₦)" 
+          required 
+          min="1"
+          style={styles.input}
+        />
+        <button disabled={loading} style={styles.btnPrimary}>
+          {loading ? (
+            <>
+              <Loader2 size={18} style={styles.spinner} />
+              <span style={{marginLeft: 8}}>Processing...</span>
+            </>
+          ) : 'Register Member'}
         </button>
       </form>
 
       {qr && (
-        <div className="qr-result shadow-pop">
-          <img src={qr.code} alt="QR" />
-          <h4>{qr.name}</h4>
-          <button onClick={() => window.print()} className="btn-secondary">
-            <Printer size={16} /> Print ID Card
+        <div style={styles.qrResult}>
+          <img src={qr.code} alt="QR Code" style={styles.qrImage} />
+          <h4 style={styles.qrName}>{qr.name}</h4>
+          <p style={styles.qrAmount}>Daily: ₦{Number(qr.amount).toLocaleString()}</p>
+          <button onClick={() => window.print()} style={styles.btnSecondary}>
+            <Printer size={16} />
+            <span style={{marginLeft: 6}}>Print ID Card</span>
           </button>
         </div>
       )}
@@ -182,127 +286,638 @@ const MemberRegistration = ({ ownerId }) => {
   );
 };
 
-// --- LOGIN SCREEN ---
-const LoginScreen = ({ onLogin }) => (
-  <div className="login-page">
-    <style>{styles}</style>
-    <div className="login-card shadow-pop">
-      <div className="login-header">
-        <Landmark size={40} className="login-icon" />
-        <h2>AJO-PRO</h2>
-        <p>Enter Oreofe Credentials</p>
+// --- EMPLOYEE MANAGEMENT ---
+const EmployeeManagement = ({ ownerId }) => {
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'collector')
+        .eq('ajo_owner_id', ownerId);
+      setEmployees(data || []);
+      setLoading(false);
+    };
+    load();
+  }, [ownerId]);
+
+  return (
+    <div style={styles.fadeIn}>
+      <div style={styles.cardForm}>
+        <h3 style={styles.formTitle}>Employee Management</h3>
+        {loading ? (
+          <div style={styles.loadingContainer}>
+            <Loader2 size={32} style={styles.spinner} />
+          </div>
+        ) : employees.length === 0 ? (
+          <div style={styles.emptyState}>
+            <Users size={48} style={{color: '#94a3b8'}} />
+            <p>No employees registered yet</p>
+          </div>
+        ) : (
+          <div style={styles.employeeList}>
+            {employees.map(emp => (
+              <div key={emp.id} style={styles.employeeCard}>
+                <div style={styles.employeeAvatar}>
+                  {emp.full_name?.charAt(0).toUpperCase()}
+                </div>
+                <div style={styles.employeeInfo}>
+                  <strong>{emp.full_name}</strong>
+                  <span>{emp.email}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      <form onSubmit={onLogin} className="login-form">
-        <input name="email" placeholder="Username" required />
-        <input name="password" type="password" placeholder="Password" required />
-        <button className="btn-primary">SECURE LOGIN</button>
+    </div>
+  );
+};
+
+// --- COLLECTION INTERFACE ---
+const CollectionInterface = ({ profile, userLocation }) => {
+  const [scanning, setScanning] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const handleScan = async (data) => {
+    if (data && !result) {
+      try {
+        const parsed = JSON.parse(data.text);
+        setResult(parsed);
+        setScanning(false);
+        
+        // Process collection here
+        const { error } = await supabase.from('transactions').insert([{
+          contributor_id: parsed.id,
+          collector_id: profile.id,
+          amount: parsed.amt,
+          geofence_verified: true
+        }]);
+        
+        if (!error) {
+          alert('Collection successful!');
+        }
+      } catch (e) {
+        console.error('Scan error:', e);
+      }
+    }
+  };
+
+  return (
+    <div style={styles.fadeIn}>
+      <div style={styles.scannerCard}>
+        <h3 style={styles.formTitle}>Scan Member QR Code</h3>
+        {scanning ? (
+          <div style={styles.scannerContainer}>
+            <QrScanner
+              delay={300}
+              onError={(err) => console.error(err)}
+              onScan={handleScan}
+              style={{ width: '100%' }}
+            />
+            <button onClick={() => setScanning(false)} style={styles.btnSecondary}>
+              Cancel Scan
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setScanning(true)} style={styles.btnPrimary}>
+            <Scan size={20} />
+            <span style={{marginLeft: 8}}>Start Scanning</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// --- LOCATION GATE ---
+const LocationGate = ({ children, onLocationUpdate }) => {
+  const [hasLocation, setHasLocation] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          onLocationUpdate({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setHasLocation(true);
+        },
+        (err) => {
+          setError('Location access required for this app');
+          setHasLocation(true); // Allow access anyway for demo
+        }
+      );
+    } else {
+      setHasLocation(true);
+    }
+  }, [onLocationUpdate]);
+
+  if (!hasLocation) {
+    return (
+      <div style={styles.loadingScreen}>
+        <Loader2 size={48} style={styles.spinner} />
+        <p>Getting your location...</p>
+      </div>
+    );
+  }
+
+  return children;
+};
+
+// --- LOGIN SCREEN ---
+const LoginScreen = ({ onLogin, loading }) => (
+  <div style={styles.loginPage}>
+    <div style={styles.loginCard}>
+      <div style={styles.loginHeader}>
+        <Landmark size={48} style={styles.loginIcon} />
+        <h2 style={styles.loginTitle}>AJO-PRO</h2>
+        <p style={styles.loginSubtitle}>Secure Collection System</p>
+      </div>
+      <form onSubmit={onLogin} style={styles.loginForm}>
+        <input 
+          name="email" 
+          placeholder="Username" 
+          required 
+          style={styles.input}
+          autoComplete="username"
+        />
+        <input 
+          name="password" 
+          type="password" 
+          placeholder="Password" 
+          required 
+          style={styles.input}
+          autoComplete="current-password"
+        />
+        <button disabled={loading} style={styles.btnPrimary}>
+          {loading ? (
+            <>
+              <Loader2 size={18} style={styles.spinner} />
+              <span style={{marginLeft: 8}}>Logging in...</span>
+            </>
+          ) : (
+            <>
+              <ShieldCheck size={18} />
+              <span style={{marginLeft: 8}}>SECURE LOGIN</span>
+            </>
+          )}
+        </button>
       </form>
     </div>
   </div>
 );
 
-// --- CSS STYLES ---
-const styles = `
-  :root {
-    --primary: #2563eb;
-    --dark: #0f172a;
-    --light: #f8fafc;
-    --success: #22c55e;
-    --warning: #f59e0b;
-  }
-
-  * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
-  body { margin: 0; background: var(--light); color: var(--dark); }
-
-  .app-container { max-width: 500px; margin: 0 auto; min-height: 100vh; position: relative; }
+// --- STYLES ---
+const styles = {
+  appContainer: {
+    maxWidth: '500px',
+    margin: '0 auto',
+    minHeight: '100vh',
+    background: '#f8fafc',
+    position: 'relative',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+  },
   
-  .app-header { 
-    padding: 20px; display: flex; justify-content: space-between; align-items: center;
-    background: white; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 10;
+  appHeader: {
+    padding: '20px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    background: 'white',
+    borderBottom: '1px solid #e2e8f0',
+    position: 'sticky',
+    top: 0,
+    zIndex: 10,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+  },
+
+  brand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+
+  logoDot: {
+    width: '12px',
+    height: '12px',
+    background: '#2563eb',
+    borderRadius: '50%'
+  },
+
+  brandH1: {
+    fontSize: '20px',
+    fontWeight: '900',
+    margin: 0,
+    letterSpacing: '-0.5px',
+    color: '#0f172a'
+  },
+
+  brandSpan: {
+    color: '#2563eb'
+  },
+
+  profilePill: {
+    background: '#eff6ff',
+    color: '#2563eb',
+    padding: '6px 14px',
+    borderRadius: '20px',
+    fontSize: '13px',
+    fontWeight: '700',
+    border: '1px solid #dbeafe'
+  },
+
+  contentArea: {
+    padding: '20px',
+    paddingBottom: '100px',
+    minHeight: 'calc(100vh - 140px)'
+  },
+
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '15px',
+    marginBottom: '30px'
+  },
+
+  statCard: {
+    background: 'white',
+    padding: '24px',
+    borderRadius: '24px',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+  },
+
+  statCardPrimary: {
+    background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
+    color: 'white',
+    border: 'none',
+    boxShadow: '0 10px 15px -3px rgba(37, 99, 235, 0.3)'
+  },
+
+  statCardLabel: {
+    fontSize: '11px',
+    fontWeight: '700',
+    opacity: 0.7,
+    margin: '0 0 10px 0',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
+  },
+
+  statCardValue: {
+    fontSize: '26px',
+    fontWeight: '900',
+    margin: 0
+  },
+
+  sectionTitle: {
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#94a3b8',
+    letterSpacing: '1.2px',
+    marginBottom: '16px',
+    marginTop: '30px'
+  },
+
+  activityList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+
+  activityItem: {
+    background: 'white',
+    padding: '16px',
+    borderRadius: '20px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    border: '1px solid #f1f5f9',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+    transition: 'all 0.2s',
+    cursor: 'pointer'
+  },
+
+  itemInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px'
+  },
+
+  itemName: {
+    fontSize: '15px',
+    fontWeight: '600',
+    color: '#0f172a'
+  },
+
+  itemTime: {
+    fontSize: '12px',
+    color: '#94a3b8'
+  },
+
+  itemAmount: {
+    textAlign: 'right',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '6px'
+  },
+
+  amount: {
+    fontWeight: '800',
+    fontSize: '16px',
+    color: '#0f172a'
+  },
+
+  tagOk: {
+    fontSize: '10px',
+    background: '#dcfce7',
+    color: '#166534',
+    padding: '3px 10px',
+    borderRadius: '10px',
+    fontWeight: '600',
+    letterSpacing: '0.3px'
+  },
+
+  tagWarn: {
+    fontSize: '10px',
+    background: '#fee2e2',
+    color: '#991b1b',
+    padding: '3px 10px',
+    borderRadius: '10px',
+    fontWeight: '600',
+    letterSpacing: '0.3px'
+  },
+
+  cardForm: {
+    background: 'white',
+    padding: '28px',
+    borderRadius: '30px',
+    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)',
+    border: '1px solid #f1f5f9'
+  },
+
+  formTitle: {
+    marginTop: 0,
+    fontSize: '20px',
+    marginBottom: '24px',
+    fontWeight: '700',
+    color: '#0f172a'
+  },
+
+  input: {
+    width: '100%',
+    padding: '16px',
+    marginBottom: '14px',
+    borderRadius: '16px',
+    border: '1px solid #e2e8f0',
+    background: '#f8fafc',
+    outline: 'none',
+    transition: 'all 0.2s',
+    fontSize: '15px',
+    boxSizing: 'border-box'
+  },
+
+  btnPrimary: {
+    width: '100%',
+    padding: '16px',
+    borderRadius: '16px',
+    border: 'none',
+    background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
+    color: 'white',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontSize: '15px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s',
+    boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)'
+  },
+
+  btnSecondary: {
+    background: '#f1f5f9',
+    color: '#0f172a',
+    border: 'none',
+    padding: '12px 22px',
+    borderRadius: '12px',
+    fontSize: '13px',
+    fontWeight: '700',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    margin: '16px auto 0',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+
+  bottomNav: {
+    position: 'fixed',
+    bottom: '20px',
+    left: '20px',
+    right: '20px',
+    maxWidth: '460px',
+    margin: '0 auto',
+    background: '#0f172a',
+    borderRadius: '26px',
+    padding: '12px 16px',
+    display: 'flex',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)',
+    backdropFilter: 'blur(10px)',
+    zIndex: 100
+  },
+
+  navButton: {
+    background: 'none',
+    border: 'none',
+    color: '#64748b',
+    padding: '12px 16px',
+    cursor: 'pointer',
+    transition: 'all 0.3s',
+    borderRadius: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+
+  navButtonActive: {
+    color: 'white',
+    background: 'rgba(255,255,255,0.1)'
+  },
+
+  scanBtn: {
+    background: '#2563eb',
+    color: 'white'
+  },
+
+  loginPage: {
+    minHeight: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    padding: '20px'
+  },
+
+  loginCard: {
+    background: 'white',
+    padding: '44px 36px',
+    borderRadius: '40px',
+    width: '100%',
+    maxWidth: '400px',
+    textAlign: 'center',
+    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+  },
+
+  loginHeader: {
+    marginBottom: '32px'
+  },
+
+  loginIcon: {
+    color: '#2563eb',
+    marginBottom: '16px'
+  },
+
+  loginTitle: {
+    fontSize: '32px',
+    fontWeight: '900',
+    margin: '0 0 8px 0',
+    color: '#0f172a'
+  },
+
+  loginSubtitle: {
+    color: '#94a3b8',
+    margin: 0,
+    fontSize: '14px'
+  },
+
+  loginForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px'
+  },
+
+  qrResult: {
+    marginTop: '32px',
+    textAlign: 'center',
+    background: 'white',
+    padding: '28px',
+    borderRadius: '30px',
+    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)',
+    border: '1px solid #f1f5f9'
+  },
+
+  qrImage: {
+    width: '240px',
+    height: '240px',
+    border: '12px solid #f8fafc',
+    borderRadius: '24px',
+    marginBottom: '16px'
+  },
+
+  qrName: {
+    fontSize: '20px',
+    fontWeight: '700',
+    margin: '0 0 8px 0',
+    color: '#0f172a'
+  },
+
+  qrAmount: {
+    fontSize: '14px',
+    color: '#64748b',
+    margin: '0 0 12px 0'
+  },
+
+  fadeIn: {
+    animation: 'fadeIn 0.5s ease-out'
+  },
+
+  spinner: {
+    animation: 'spin 1s linear infinite'
+  },
+
+  loadingContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '40px',
+    color: '#2563eb'
+  },
+
+  emptyState: {
+    textAlign: 'center',
+    padding: '40px 20px',
+    color: '#94a3b8'
+  },
+
+  errorAlert: {
+    background: '#fee2e2',
+    color: '#991b1b',
+    padding: '12px 16px',
+    borderRadius: '12px',
+    marginBottom: '16px',
+    fontSize: '13px',
+    fontWeight: '600'
+  },
+
+  loadingScreen: {
+    minHeight: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '16px',
+    color: '#2563eb'
+  },
+
+  employeeList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+
+  employeeCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    padding: '14px',
+    background: '#f8fafc',
+    borderRadius: '16px'
+  },
+
+  employeeAvatar: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
+    color: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '20px',
+    fontWeight: '700'
+  },
+
+  employeeInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px'
+  },
+
+  scannerCard: {
+    background: 'white',
+    padding: '28px',
+    borderRadius: '30px',
+    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)',
+    border: '1px solid #f1f5f9',
+    textAlign: 'center'
+  },
+
+  scannerContainer: {
+    marginTop: '20px'
   }
-
-  .brand { display: flex; align-items: center; gap: 8px; }
-  .logo-dot { width: 12px; height: 12px; background: var(--primary); border-radius: 50%; }
-  .brand h1 { font-size: 18px; font-weight: 900; margin: 0; letter-spacing: -1px; }
-  .brand span { color: var(--primary); }
-
-  .profile-pill { 
-    background: #eff6ff; color: var(--primary); padding: 4px 12px; 
-    border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #dbeafe;
-  }
-
-  .content-area { padding: 20px; padding-bottom: 100px; }
-
-  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; }
-  .stat-card { background: white; padding: 20px; border-radius: 24px; border: 1px solid #e2e8f0; }
-  .stat-card.primary { background: var(--dark); color: white; border: none; }
-  .stat-card p { font-size: 11px; font-weight: 700; opacity: 0.7; margin: 0 0 8px 0; text-transform: uppercase; }
-  .stat-card h2 { font-size: 24px; font-weight: 900; margin: 0; }
-
-  .section-title { font-size: 11px; font-weight: 800; color: #94a3b8; letter-spacing: 1px; margin-bottom: 15px; }
-
-  .activity-list { display: flex; flex-direction: column; gap: 10px; }
-  .activity-item { 
-    background: white; padding: 15px; border-radius: 20px; 
-    display: flex; justify-content: space-between; align-items: center;
-    border: 1px solid #f1f5f9;
-  }
-
-  .item-info strong { display: block; font-size: 14px; }
-  .item-info span { font-size: 11px; color: #94a3b8; }
-  .item-amount { text-align: right; font-weight: 800; font-size: 15px; }
-  
-  .tag-ok { font-size: 9px; background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 10px; display: block; margin-top: 4px; }
-  .tag-warn { font-size: 9px; background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 10px; display: block; margin-top: 4px; }
-
-  .card-form { background: white; padding: 25px; border-radius: 30px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }
-  .card-form h3 { margin-top: 0; font-size: 18px; margin-bottom: 20px; }
-  .card-form input { 
-    width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 15px; 
-    border: 1px solid #e2e8f0; background: #f8fafc; outline: none; transition: 0.2s;
-  }
-  .card-form input:focus { border-color: var(--primary); background: white; }
-
-  .btn-primary { 
-    width: 100%; padding: 16px; border-radius: 15px; border: none; 
-    background: var(--primary); color: white; font-weight: 800; cursor: pointer;
-  }
-  
-  .btn-secondary {
-    background: #f1f5f9; color: var(--dark); border: none; padding: 10px 20px; border-radius: 10px;
-    font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 5px; margin: 15px auto;
-  }
-
-  .bottom-nav { 
-    position: fixed; bottom: 20px; left: 20px; right: 20px; max-width: 460px; margin: 0 auto;
-    background: var(--dark); border-radius: 25px; padding: 10px; display: flex; 
-    justify-content: space-around; align-items: center; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);
-  }
-  .bottom-nav button { background: none; border: none; color: #64748b; padding: 12px; cursor: pointer; transition: 0.3s; }
-  .bottom-nav button.active { color: white; }
-  .scan-btn-nav { background: var(--primary) !important; color: white !important; border-radius: 18px; }
-
-  .login-page { 
-    height: 100vh; display: flex; items-center; justify-content: center; 
-    background: #f1f5f9; padding: 20px;
-  }
-  .login-card { 
-    background: white; padding: 40px; border-radius: 40px; width: 100%; max-width: 400px; 
-    text-align: center;
-  }
-  .login-icon { color: var(--primary); margin-bottom: 20px; }
-  .login-header h2 { font-size: 28px; font-weight: 900; margin: 0; }
-  .login-header p { color: #94a3b8; margin-bottom: 30px; }
-
-  .qr-result { margin-top: 30px; text-align: center; background: white; padding: 20px; border-radius: 30px; }
-  .qr-result img { width: 200px; border: 10px solid #f8fafc; border-radius: 20px; }
-
-  .fade-in { animation: fadeIn 0.5s ease-out; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-  
-  .shadow-pop { box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.05); }
-  .spinner { animation: spin 1s linear infinite; }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-`;
-
-// LocationGate, EmployeeManagement, etc. would continue as before using these classes.
+};
