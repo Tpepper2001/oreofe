@@ -4,7 +4,8 @@ import QrScanner from 'react-qr-scanner';
 import QRCode from 'qrcode';
 import { 
   Users, UserPlus, MapPin, Scan, LayoutDashboard, 
-  Settings, LogOut, CheckCircle, WifiOff, Loader2, ShieldCheck, Landmark, Printer, AlertCircle, TrendingUp
+  Settings, LogOut, CheckCircle, Loader2, ShieldCheck, Landmark, Printer, 
+  AlertCircle, Eye, Download, Search
 } from 'lucide-react';
 
 /* ===================== CONFIG ===================== */
@@ -12,7 +13,7 @@ const SUPABASE_URL = 'https://watrosnylvkiuvuptdtp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdHJvc255bHZraXV2dXB0ZHRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5MzE2NzEsImV4cCI6MjA4MjUwNzY3MX0.ku6_Ngf2JRJ8fxLs_Q-EySgCU37MjUK3WofpO9bazds';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const GEOFENCE_RADIUS_METERS = 100; // 100 meters radius
+const GEOFENCE_RADIUS_METERS = 100;
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -21,14 +22,22 @@ export default function App() {
   const [userLocation, setUserLocation] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Check URL path for agent login
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path === '/agent') {
+      // Agent login detected
+    }
+  }, []);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const email = e.target.email.value;
+    const username = e.target.username.value;
     const password = e.target.password.value;
 
     // Hardcoded admin login
-    if (email === 'oreofe' && password === 'oreofe') {
+    if (username === 'oreofe' && password === 'oreofe') {
       const ownerData = { id: 'admin', full_name: 'Oreofe Owner', role: 'admin', ajo_owner_id: 'admin' };
       setUser({ id: 'admin' });
       setProfile(ownerData);
@@ -36,15 +45,20 @@ export default function App() {
       return;
     }
 
-    // Try Supabase auth for employees
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    // Employee login - check employees table
+    const { data: employee } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('employee_id_number', username)
+      .eq('password', password)
+      .single();
+
     setLoading(false);
-    if (error) {
-      alert("Access Denied: " + error.message);
+    if (employee) {
+      setUser({ id: employee.id });
+      setProfile({ ...employee, role: 'employee' });
     } else {
-      setUser(data.user);
-      const { data: p } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
-      setProfile(p);
+      alert("Access Denied: Invalid credentials");
     }
   };
 
@@ -102,7 +116,7 @@ export default function App() {
               </button>
             </>
           ) : (
-            <button onClick={() => setView('scan')} style={{...styles.navButton, ...styles.scanBtn}}>
+            <button style={{...styles.navButton, ...styles.scanBtn}}>
               <Scan size={22} />
             </button>
           )}
@@ -115,118 +129,180 @@ export default function App() {
   );
 }
 
-// --- OWNER DASHBOARD ---
+// --- OWNER DASHBOARD (Shows Members List with QR Codes) ---
 const OwnerDashboard = () => {
-  const [txs, setTxs] = useState([]);
-  const [stats, setStats] = useState({ totalToday: 0, totalMembers: 0, totalCollected: 0 });
+  const [members, setMembers] = useState([]);
+  const [selectedMember, setSelectedMember] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  
+  const [qrCodes, setQrCodes] = useState({});
+
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      
-      // Get transactions with contributor names
-      const { data: txData } = await supabase
-        .from('transactions')
-        .select('*, contributors(full_name, registration_no)')
-        .order('created_at', { ascending: false })
-        .limit(15);
-      
-      setTxs(txData || []);
-
-      // Get total members count
-      const { count } = await supabase
-        .from('contributors')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
-
-      // Calculate today's total
-      const today = new Date().toISOString().split('T')[0];
-      const todayTotal = (txData || [])
-        .filter(t => t.created_at.startsWith(today))
-        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-      // Calculate all-time total
-      const allTimeTotal = (txData || []).reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-      setStats({
-        totalToday: todayTotal,
-        totalMembers: count || 0,
-        totalCollected: allTimeTotal
-      });
-
-      setLoading(false);
-    };
-    
-    load();
-    
-    // Subscribe to real-time updates
-    const sub = supabase
-      .channel('transactions-channel')
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'transactions' 
-      }, (payload) => {
-        load(); // Reload when new transaction comes in
-      })
-      .subscribe();
-    
-    return () => supabase.removeChannel(sub);
+    loadMembers();
   }, []);
+
+  const loadMembers = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('contributors')
+      .select('*')
+      .eq('ajo_owner_id', 'admin')
+      .order('created_at', { ascending: false });
+    
+    if (data) {
+      setMembers(data);
+      // Generate QR codes for all members
+      data.forEach(async (member) => {
+        const qrData = JSON.stringify({ 
+          id: member.id, 
+          regNo: member.registration_no,
+          name: member.full_name,
+          amount: member.expected_amount
+        });
+        const qrCode = await QRCode.toDataURL(qrData, { width: 200, margin: 2 });
+        setQrCodes(prev => ({ ...prev, [member.id]: qrCode }));
+      });
+    }
+    setLoading(false);
+  };
+
+  const filteredMembers = members.filter(m => 
+    m.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    m.registration_no.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const printMemberCard = (member) => {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Member Card - ${member.full_name}</title>
+          <style>
+            body { font-family: Arial; padding: 40px; }
+            .card { border: 2px solid #000; padding: 30px; max-width: 400px; margin: 0 auto; }
+            h2 { margin: 0 0 20px 0; text-align: center; }
+            .qr { text-align: center; margin: 20px 0; }
+            .qr img { width: 200px; height: 200px; }
+            .info { margin: 10px 0; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h2>AJO-PRO Member Card</h2>
+            <div class="qr"><img src="${qrCodes[member.id]}" /></div>
+            <div class="info"><strong>Name:</strong> ${member.full_name}</div>
+            <div class="info"><strong>ID:</strong> ${member.registration_no}</div>
+            <div class="info"><strong>Phone:</strong> ${member.phone_number}</div>
+            <div class="info"><strong>Daily Amount:</strong> ₦${Number(member.expected_amount).toLocaleString()}</div>
+            <div class="info"><strong>Balance:</strong> ₦${Number(member.current_balance).toLocaleString()}</div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  if (selectedMember) {
+    return (
+      <div style={styles.fadeIn}>
+        <button onClick={() => setSelectedMember(null)} style={styles.backBtn}>
+          ← Back to Members
+        </button>
+        <div style={styles.memberDetailCard}>
+          <div style={styles.qrSection}>
+            {qrCodes[selectedMember.id] && (
+              <img src={qrCodes[selectedMember.id]} alt="QR" style={styles.qrImageLarge} />
+            )}
+          </div>
+          <h2 style={styles.memberName}>{selectedMember.full_name}</h2>
+          <div style={styles.memberInfoGrid}>
+            <div style={styles.infoItem}>
+              <span style={styles.infoLabel}>Registration No</span>
+              <span style={styles.infoValue}>{selectedMember.registration_no}</span>
+            </div>
+            <div style={styles.infoItem}>
+              <span style={styles.infoLabel}>Phone Number</span>
+              <span style={styles.infoValue}>{selectedMember.phone_number}</span>
+            </div>
+            <div style={styles.infoItem}>
+              <span style={styles.infoLabel}>Address</span>
+              <span style={styles.infoValue}>{selectedMember.address}</span>
+            </div>
+            <div style={styles.infoItem}>
+              <span style={styles.infoLabel}>Daily Amount</span>
+              <span style={styles.infoValue}>₦{Number(selectedMember.expected_amount).toLocaleString()}</span>
+            </div>
+            <div style={styles.infoItem}>
+              <span style={styles.infoLabel}>Current Balance</span>
+              <span style={styles.infoValue}>₦{Number(selectedMember.current_balance).toLocaleString()}</span>
+            </div>
+            <div style={styles.infoItem}>
+              <span style={styles.infoLabel}>Total Contributed</span>
+              <span style={styles.infoValue}>₦{Number(selectedMember.total_contributed).toLocaleString()}</span>
+            </div>
+            <div style={styles.infoItem}>
+              <span style={styles.infoLabel}>Status</span>
+              <span style={{...styles.tagOk, display: 'inline-block'}}>{selectedMember.status}</span>
+            </div>
+            <div style={styles.infoItem}>
+              <span style={styles.infoLabel}>Joined</span>
+              <span style={styles.infoValue}>{new Date(selectedMember.created_at).toLocaleDateString()}</span>
+            </div>
+          </div>
+          <button onClick={() => printMemberCard(selectedMember)} style={styles.btnPrimary}>
+            <Printer size={18} />
+            <span style={{marginLeft: 8}}>Print ID Card</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.fadeIn}>
-      <div style={styles.statsGrid}>
-        <div style={{...styles.statCard, ...styles.statCardPrimary}}>
-          <p style={styles.statCardLabel}>Today's Total</p>
-          <h2 style={styles.statCardValue}>₦{stats.totalToday.toLocaleString()}</h2>
-        </div>
-        <div style={styles.statCard}>
-          <p style={styles.statCardLabel}>Active Members</p>
-          <h2 style={styles.statCardValue}>{stats.totalMembers}</h2>
-        </div>
+      <div style={styles.searchBar}>
+        <Search size={20} style={{color: '#94a3b8', position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)'}} />
+        <input 
+          type="text"
+          placeholder="Search members by name or ID..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={styles.searchInput}
+        />
       </div>
 
-      <div style={styles.statsGrid}>
-        <div style={styles.statCard}>
-          <p style={styles.statCardLabel}>Collections</p>
-          <h2 style={styles.statCardValue}>{txs.length}</h2>
-        </div>
-        <div style={styles.statCard}>
-          <p style={styles.statCardLabel}>All-Time Total</p>
-          <h2 style={styles.statCardValue}>₦{(stats.totalCollected / 1000).toFixed(1)}K</h2>
-        </div>
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
+        <h3 style={styles.sectionTitle}>ALL MEMBERS ({filteredMembers.length})</h3>
       </div>
 
-      <h3 style={styles.sectionTitle}>LIVE ACTIVITY</h3>
-      
       {loading ? (
         <div style={styles.loadingContainer}>
           <Loader2 size={32} style={styles.spinner} />
         </div>
-      ) : txs.length === 0 ? (
+      ) : filteredMembers.length === 0 ? (
         <div style={styles.emptyState}>
-          <AlertCircle size={48} style={{color: '#94a3b8'}} />
-          <p>No transactions yet</p>
+          <Users size={48} style={{color: '#94a3b8'}} />
+          <p>No members found</p>
         </div>
       ) : (
-        <div style={styles.activityList}>
-          {txs.map(t => (
-            <div key={t.id} style={styles.activityItem}>
-              <div style={styles.itemInfo}>
-                <strong style={styles.itemName}>
-                  {t.contributors?.full_name || 'Unknown'}
-                </strong>
-                <span style={styles.itemTime}>
-                  {t.contributors?.registration_no} • {new Date(t.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                </span>
+        <div style={styles.membersList}>
+          {filteredMembers.map(member => (
+            <div key={member.id} style={styles.memberCard} onClick={() => setSelectedMember(member)}>
+              <div style={styles.memberCardLeft}>
+                {qrCodes[member.id] && (
+                  <img src={qrCodes[member.id]} alt="QR" style={styles.qrThumbnail} />
+                )}
               </div>
-              <div style={styles.itemAmount}>
-                <div style={styles.amount}>₦{Number(t.amount).toLocaleString()}</div>
-                <span style={t.geofence_verified ? styles.tagOk : styles.tagWarn}>
-                  {t.geofence_verified ? '✓ Verified' : '⚠ Remote'}
-                </span>
+              <div style={styles.memberCardCenter}>
+                <strong style={styles.memberCardName}>{member.full_name}</strong>
+                <span style={styles.memberCardId}>{member.registration_no}</span>
+                <span style={styles.memberCardPhone}>{member.phone_number}</span>
+              </div>
+              <div style={styles.memberCardRight}>
+                <div style={styles.memberAmount}>₦{Number(member.expected_amount).toLocaleString()}</div>
+                <span style={styles.memberBalance}>Bal: ₦{Number(member.current_balance).toLocaleString()}</span>
+                <Eye size={16} style={{color: '#2563eb', marginTop: 8}} />
               </div>
             </div>
           ))}
@@ -380,7 +456,7 @@ const MemberRegistration = () => {
   );
 };
 
-// --- EMPLOYEE MANAGEMENT ---
+// --- EMPLOYEE MANAGEMENT (with password) ---
 const EmployeeManagement = () => {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -414,6 +490,7 @@ const EmployeeManagement = () => {
       full_name: fd.get('name'),
       employee_id_number: employeeId,
       phone_number: fd.get('phone'),
+      password: fd.get('password'),
       status: 'active'
     }]);
 
@@ -422,6 +499,7 @@ const EmployeeManagement = () => {
       setShowForm(false);
       e.target.reset();
       loadEmployees();
+      alert(`Employee added successfully!\nUsername: ${employeeId}\nPassword: ${fd.get('password')}\n\nEmployee can login at /agent`);
     } else {
       alert('Error adding employee: ' + error.message);
     }
@@ -441,6 +519,7 @@ const EmployeeManagement = () => {
           <form onSubmit={handleAddEmployee} style={{marginBottom: 24, paddingBottom: 24, borderBottom: '1px solid #e2e8f0'}}>
             <input name="name" placeholder="Full Name" required style={styles.input} />
             <input name="phone" type="tel" placeholder="Phone Number" required style={styles.input} />
+            <input name="password" type="password" placeholder="Set Password" required minLength="4" style={styles.input} />
             <button disabled={formLoading} style={styles.btnPrimary}>
               {formLoading ? <Loader2 size={18} style={styles.spinner} /> : 'Add Employee'}
             </button>
@@ -466,7 +545,10 @@ const EmployeeManagement = () => {
                 <div style={styles.employeeInfo}>
                   <strong>{emp.full_name}</strong>
                   <span style={{fontSize: 12, color: '#64748b'}}>
-                    {emp.employee_id_number} • {emp.phone_number}
+                    ID: {emp.employee_id_number}
+                  </span>
+                  <span style={{fontSize: 12, color: '#64748b'}}>
+                    {emp.phone_number}
                   </span>
                 </div>
                 <span style={{...styles.tagOk, marginLeft: 'auto'}}>
@@ -481,15 +563,14 @@ const EmployeeManagement = () => {
   );
 };
 
-// --- COLLECTION INTERFACE (for employees) ---
+// --- COLLECTION INTERFACE ---
 const CollectionInterface = ({ profile, userLocation }) => {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState(null);
   const [processing, setProcessing] = useState(false);
 
-  // Calculate distance between two GPS coordinates (Haversine formula)
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371e3; // Earth radius in meters
+    const R = 6371e3;
     const φ1 = lat1 * Math.PI / 180;
     const φ2 = lat2 * Math.PI / 180;
     const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -500,7 +581,7 @@ const CollectionInterface = ({ profile, userLocation }) => {
               Math.sin(Δλ/2) * Math.sin(Δλ/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-    return R * c; // Distance in meters
+    return R * c;
   };
 
   const handleScan = async (data) => {
@@ -509,7 +590,6 @@ const CollectionInterface = ({ profile, userLocation }) => {
       try {
         const parsed = JSON.parse(data.text);
         
-        // Get contributor details
         const { data: contributor } = await supabase
           .from('contributors')
           .select('*')
@@ -522,7 +602,6 @@ const CollectionInterface = ({ profile, userLocation }) => {
           return;
         }
 
-        // Calculate distance from registered location
         const distance = calculateDistance(
           userLocation.lat,
           userLocation.lng,
@@ -532,7 +611,6 @@ const CollectionInterface = ({ profile, userLocation }) => {
 
         const isVerified = distance <= GEOFENCE_RADIUS_METERS;
 
-        // Insert transaction
         const { error: txError } = await supabase.from('transactions').insert([{
           ajo_owner_id: 'admin',
           contributor_id: parsed.id,
@@ -570,10 +648,6 @@ const CollectionInterface = ({ profile, userLocation }) => {
     }
   };
 
-  const handleError = (err) => {
-    console.error('Scanner error:', err);
-  };
-
   if (result) {
     return (
       <div style={styles.fadeIn}>
@@ -608,7 +682,7 @@ const CollectionInterface = ({ profile, userLocation }) => {
             <div style={styles.scannerFrame}>
               <QrScanner
                 delay={300}
-                onError={handleError}
+                onError={(err) => console.error(err)}
                 onScan={handleScan}
                 style={{ width: '100%' }}
                 constraints={{
@@ -634,7 +708,6 @@ const CollectionInterface = ({ profile, userLocation }) => {
 // --- LOCATION GATE ---
 const LocationGate = ({ children, onLocationUpdate }) => {
   const [hasLocation, setHasLocation] = useState(false);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -644,8 +717,7 @@ const LocationGate = ({ children, onLocationUpdate }) => {
           setHasLocation(true);
         },
         (err) => {
-          setError('Location access required');
-          setHasLocation(true); // Allow anyway for testing
+          setHasLocation(true);
         },
         { enableHighAccuracy: true, maximumAge: 10000 }
       );
@@ -680,8 +752,8 @@ const LoginScreen = ({ onLogin, loading }) => (
       </div>
       <form onSubmit={onLogin} style={styles.loginForm}>
         <input 
-          name="email" 
-          placeholder="Username or Email" 
+          name="username" 
+          placeholder="Username / Employee ID" 
           required 
           style={styles.input}
           autoComplete="username"
@@ -708,9 +780,13 @@ const LoginScreen = ({ onLogin, loading }) => (
           )}
         </button>
       </form>
+      <p style={{marginTop: 20, fontSize: 12, color: '#94a3b8'}}>
+        Employees login at: /agent
+      </p>
     </div>
   </div>
 );
+
 // --- STYLES ---
 const styles = {
   appContainer: {
@@ -745,7 +821,8 @@ const styles = {
     width: '12px',
     height: '12px',
     background: '#2563eb',
-    borderRadius: '50%'
+    borderRadius: '50%',
+    boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.2)'
   },
 
   brandH1: {
@@ -776,11 +853,168 @@ const styles = {
     minHeight: 'calc(100vh - 140px)'
   },
 
+  searchBar: {
+    position: 'relative',
+    marginBottom: '20px'
+  },
+
+  searchInput: {
+    width: '100%',
+    padding: '14px 14px 14px 46px',
+    borderRadius: '16px',
+    border: '1px solid #e2e8f0',
+    background: 'white',
+    fontSize: '14px',
+    outline: 'none',
+    boxSizing: 'border-box',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+  },
+
+  membersList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+
+  memberCard: {
+    background: 'white',
+    padding: '16px',
+    borderRadius: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    border: '1px solid #f1f5f9',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+  },
+
+  memberCardLeft: {
+    flexShrink: 0
+  },
+
+  qrThumbnail: {
+    width: '60px',
+    height: '60px',
+    borderRadius: '12px',
+    border: '2px solid #f1f5f9'
+  },
+
+  memberCardCenter: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px'
+  },
+
+  memberCardName: {
+    fontSize: '15px',
+    fontWeight: '600',
+    color: '#0f172a'
+  },
+
+  memberCardId: {
+    fontSize: '12px',
+    color: '#64748b'
+  },
+
+  memberCardPhone: {
+    fontSize: '11px',
+    color: '#94a3b8'
+  },
+
+  memberCardRight: {
+    textAlign: 'right',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '4px'
+  },
+
+  memberAmount: {
+    fontSize: '15px',
+    fontWeight: '800',
+    color: '#0f172a'
+  },
+
+  memberBalance: {
+    fontSize: '11px',
+    color: '#64748b'
+  },
+
+  memberDetailCard: {
+    background: 'white',
+    padding: '28px',
+    borderRadius: '30px',
+    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)',
+    border: '1px solid #f1f5f9'
+  },
+
+  qrSection: {
+    textAlign: 'center',
+    marginBottom: '24px'
+  },
+
+  qrImageLarge: {
+    width: '240px',
+    height: '240px',
+    borderRadius: '20px',
+    border: '3px solid #f1f5f9'
+  },
+
+  memberName: {
+    fontSize: '24px',
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: '24px',
+    color: '#0f172a'
+  },
+
+  memberInfoGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '16px',
+    marginBottom: '24px'
+  },
+
+  infoItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+
+  infoLabel: {
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
+  },
+
+  infoValue: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#0f172a'
+  },
+
+  backBtn: {
+    background: 'white',
+    border: '1px solid #e2e8f0',
+    padding: '10px 18px',
+    borderRadius: '12px',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#0f172a',
+    cursor: 'pointer',
+    marginBottom: '20px',
+    display: 'inline-block'
+  },
+
   statsGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     gap: '15px',
-    marginBottom: '30px'
+    marginBottom: '20px'
   },
 
   statCard: {
@@ -819,7 +1053,7 @@ const styles = {
     color: '#94a3b8',
     letterSpacing: '1.2px',
     marginBottom: '16px',
-    marginTop: '30px'
+    marginTop: '0'
   },
 
   activityList: {
@@ -836,9 +1070,7 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     border: '1px solid #f1f5f9',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-    transition: 'all 0.2s',
-    cursor: 'pointer'
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
   },
 
   itemInfo: {
@@ -954,6 +1186,17 @@ const styles = {
     transition: 'all 0.2s'
   },
 
+  btnSmall: {
+    background: '#2563eb',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '10px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer'
+  },
+
   bottomNav: {
     position: 'fixed',
     bottom: '20px',
@@ -1052,6 +1295,10 @@ const styles = {
     border: '1px solid #f1f5f9'
   },
 
+  qrCard: {
+    marginBottom: '16px'
+  },
+
   qrImage: {
     width: '240px',
     height: '240px',
@@ -1060,11 +1307,21 @@ const styles = {
     marginBottom: '16px'
   },
 
+  qrDetails: {
+    textAlign: 'center'
+  },
+
   qrName: {
     fontSize: '20px',
     fontWeight: '700',
     margin: '0 0 8px 0',
     color: '#0f172a'
+  },
+
+  qrRegNo: {
+    fontSize: '14px',
+    color: '#64748b',
+    margin: '0 0 8px 0'
   },
 
   qrAmount: {
@@ -1140,13 +1397,15 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '20px',
-    fontWeight: '700'
+    fontWeight: '700',
+    flexShrink: 0
   },
 
   employeeInfo: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px'
+    gap: '4px',
+    flex: 1
   },
 
   scannerCard: {
@@ -1160,5 +1419,20 @@ const styles = {
 
   scannerContainer: {
     marginTop: '20px'
+  },
+
+  scannerFrame: {
+    borderRadius: '20px',
+    overflow: 'hidden',
+    border: '3px solid #2563eb'
+  },
+
+  successCard: {
+    background: 'white',
+    padding: '40px 28px',
+    borderRadius: '30px',
+    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)',
+    border: '1px solid #f1f5f9',
+    textAlign: 'center'
   }
 };
