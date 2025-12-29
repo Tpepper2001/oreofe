@@ -72,57 +72,62 @@ export default function App() {
   return (
     <div style={styles.appContainer}>
       <LocationGate onLocationUpdate={setUserLocation}>
-        <header style={styles.appHeader}>
-          <div style={styles.brand}>
-            <div style={styles.logoDot} />
-            <h1 style={styles.brandH1}>AJO<span style={styles.brandSpan}>PRO</span></h1>
-          </div>
-          <div style={styles.profilePill}>{profile?.full_name?.split(' ')[0] || 'User'}</div>
-        </header>
+        {children => (
+          <>
+            {children}
+            <header style={styles.appHeader}>
+              <div style={styles.brand}>
+                <div style={styles.logoDot} />
+                <h1 style={styles.brandH1}>AJO<span style={styles.brandSpan}>PRO</span></h1>
+              </div>
+              <div style={styles.profilePill}>{profile?.full_name?.split(' ')[0] || 'User'}</div>
+            </header>
 
-        <main style={styles.contentArea}>
-          {profile?.role === 'admin' ? (
-            <>
-              {view === 'dashboard' && <OwnerDashboard />}
-              {view === 'members' && <MemberRegistration />}
-              {view === 'employees' && <EmployeeManagement />}
-            </>
-          ) : (
-            <CollectionInterface profile={profile} userLocation={userLocation} />
-          )}
-        </main>
+            <main style={styles.contentArea}>
+              {profile?.role === 'admin' ? (
+                <>
+                  {view === 'dashboard' && <OwnerDashboard />}
+                  {view === 'members' && <MemberRegistration />}
+                  {view === 'employees' && <EmployeeManagement />}
+                </>
+              ) : (
+                <CollectionInterface profile={profile} userLocation={userLocation} />
+              )}
+            </main>
 
-        <nav style={styles.bottomNav}>
-          <button 
-            onClick={() => setView('dashboard')} 
-            style={{...styles.navButton, ...(view === 'dashboard' ? styles.navButtonActive : {})}}
-          >
-            <LayoutDashboard size={22} />
-          </button>
-          {profile?.role === 'admin' ? (
-            <>
+            <nav style={styles.bottomNav}>
               <button 
-                onClick={() => setView('members')} 
-                style={{...styles.navButton, ...(view === 'members' ? styles.navButtonActive : {})}}
+                onClick={() => setView('dashboard')} 
+                style={{...styles.navButton, ...(view === 'dashboard' ? styles.navButtonActive : {})}}
               >
-                <UserPlus size={22} />
+                <LayoutDashboard size={22} />
               </button>
-              <button 
-                onClick={() => setView('employees')} 
-                style={{...styles.navButton, ...(view === 'employees' ? styles.navButtonActive : {})}}
-              >
-                <Settings size={22} />
+              {profile?.role === 'admin' ? (
+                <>
+                  <button 
+                    onClick={() => setView('members')} 
+                    style={{...styles.navButton, ...(view === 'members' ? styles.navButtonActive : {})}}
+                  >
+                    <UserPlus size={22} />
+                  </button>
+                  <button 
+                    onClick={() => setView('employees')} 
+                    style={{...styles.navButton, ...(view === 'employees' ? styles.navButtonActive : {})}}
+                  >
+                    <Settings size={22} />
+                  </button>
+                </>
+              ) : (
+                <button style={{...styles.navButton, ...styles.scanBtn}}>
+                  <Scan size={22} />
+                </button>
+              )}
+              <button onClick={handleLogout} style={styles.navButton}>
+                <LogOut size={22} />
               </button>
-            </>
-          ) : (
-            <button style={{...styles.navButton, ...styles.scanBtn}}>
-              <Scan size={22} />
-            </button>
-          )}
-          <button onClick={handleLogout} style={styles.navButton}>
-            <LogOut size={22} />
-          </button>
-        </nav>
+            </nav>
+          </>
+        )}
       </LocationGate>
     </div>
   );
@@ -1801,5 +1806,20 @@ const styles = {
   collectionTime: {
     fontSize: '12px',
     color: '#94a3b8'
+  },
+
+  locationWarning: {
+    background: '#fff3cd',
+    color: '#856404',
+    padding: '12px 16px',
+    borderRadius: '12px',
+    fontSize: '13px',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+    maxWidth: '460px',
+    margin: '0 auto'
   }
 };
