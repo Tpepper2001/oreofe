@@ -1878,4 +1878,4 @@ const styles = {
     background: '#f1f5f9',
     padding: '4px',
     borderRadius: '12px'
-  },
+  }
