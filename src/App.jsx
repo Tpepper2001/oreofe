@@ -857,6 +857,7 @@ const PrintCardModal = ({ member, config, onClose, colors }) => {
 
 const LoginScreen = ({ onLogin, loading, theme }) => {
   const [showPassword, setShowPassword] = useState(false);
+  const [loginType, setLoginType] = useState('admin'); // 'admin' or 'agent'
   const colors = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
 
   const handleSubmit = (e) => {
@@ -873,15 +874,65 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
       <div style={{ ...styles.loginCard, background: colors.card, borderColor: colors.border }}>
         <Landmark size={48} color={colors.primary} style={{ marginBottom: 15 }} />
         <h1 style={{ margin: 0, color: colors.text }}>{CONFIG.business.name}</h1>
-        <p style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 30 }}>
+        <p style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 25 }}>
           Management Portal
         </p>
+
+        {/* Login Type Selector */}
+        <div style={{
+          display: 'flex',
+          gap: 10,
+          marginBottom: 25,
+          background: colors.bg,
+          padding: 4,
+          borderRadius: 12,
+          border: `1px solid ${colors.border}`
+        }}>
+          <button
+            type="button"
+            onClick={() => setLoginType('admin')}
+            style={{
+              flex: 1,
+              padding: '12px',
+              border: 'none',
+              borderRadius: 10,
+              background: loginType === 'admin' ? colors.primary : 'transparent',
+              color: loginType === 'admin' ? '#fff' : colors.textSecondary,
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              fontSize: 14
+            }}
+          >
+            <LayoutDashboard size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            Admin
+          </button>
+          <button
+            type="button"
+            onClick={() => setLoginType('agent')}
+            style={{
+              flex: 1,
+              padding: '12px',
+              border: 'none',
+              borderRadius: 10,
+              background: loginType === 'agent' ? colors.primary : 'transparent',
+              color: loginType === 'agent' ? '#fff' : colors.textSecondary,
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              fontSize: 14
+            }}
+          >
+            <UserCheck size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            Agent
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit}>
           <input
             name="username"
             type="text"
-            placeholder="Username / Employee ID"
+            placeholder={loginType === 'admin' ? 'Admin Username' : 'Employee ID'}
             style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }}
             required
             autoComplete="username"
@@ -927,9 +978,37 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
               cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Signing in...' : `Sign In as ${loginType === 'admin' ? 'Admin' : 'Agent'}`}
           </button>
         </form>
+
+        {/* Login Hint */}
+        <div style={{
+          marginTop: 20,
+          padding: 12,
+          background: colors.bg,
+          borderRadius: 10,
+          fontSize: 12,
+          color: colors.textSecondary,
+          textAlign: 'left'
+        }}>
+          <p style={{ margin: '0 0 8px', fontWeight: '600', color: colors.text }}>
+            {loginType === 'admin' ? '👑 Admin Access' : '👤 Agent Access'}
+          </p>
+          {loginType === 'admin' ? (
+            <p style={{ margin: 0 }}>
+              • Full system access<br/>
+              • Manage members & agents<br/>
+              • View all transactions
+            </p>
+          ) : (
+            <p style={{ margin: 0 }}>
+              • Scan member cards<br/>
+              • Record collections<br/>
+              • Track your commission
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
