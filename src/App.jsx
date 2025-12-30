@@ -152,8 +152,7 @@ const TransactionList = ({ transactions, colors }) => (
       transactions.map(t => (
         <div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
           <div style={{ flex: 1 }}>
-            {/* Fallback for both name column variants */}
-            <p style={{ margin: 0, fontSize: 14, fontWeight: '600' }}>{t.full_name || t.contributor_name || 'Unknown Member'}</p>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: '600' }}>{t.full_name || t.contributor_name || 'Member'}</p>
             <small style={{ color: colors.textSecondary, fontSize: 12 }}>{new Date(t.created_at).toLocaleString()}</small>
           </div>
           <strong style={{ color: colors.primary, fontSize: 16 }}>₦{(t.amount || 0).toLocaleString()}</strong>
@@ -228,11 +227,12 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
   const handleSubmitPayment = async () => {
     if (!amount || Number(amount) <= 0) return;
 
-    // FIXED: Using 'full_name' column instead of 'contributor_name'
+    // FIXED: Added 'expected_amount' to the transaction insert
     const { error } = await supabase.from('transactions').insert([{
       contributor_id: selectedMember.id,
-      full_name: selectedMember.full_name, // Changed from contributor_name
+      full_name: selectedMember.full_name,
       registration_no: selectedMember.registration_no,
+      expected_amount: Number(selectedMember.expected_amount), // ADDED THIS FIELD
       employee_id: profile.id,
       employee_name: profile.full_name,
       amount: Math.floor(Number(amount)),
@@ -241,7 +241,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
 
     if (error) {
       showToast(error.message, "error");
-      console.error("DB Error:", error);
+      console.error("Payment Error:", error);
     } else {
       showToast("Payment recorded", "success");
       setSelectedMember(null);
