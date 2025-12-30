@@ -27,7 +27,6 @@ const CONFIG = {
 
 const supabase = createClient(CONFIG.supabase.url, CONFIG.supabase.key);
 
-/* ===================== MAIN APP ===================== */
 export default function App() {
   const [auth, setAuth] = useState(null);
   const [view, setView] = useState('dashboard');
@@ -57,7 +56,7 @@ export default function App() {
         agents: agentsRes.data || []
       });
     } catch (error) {
-      showToast("Failed to fetch data", "error");
+      showToast("Data fetch failed", "error");
     } finally {
       setLoading(false);
     }
@@ -144,7 +143,68 @@ const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, config
   return null;
 };
 
-/* ===================== COMPONENTS ===================== */
+/* ===================== SCANNER & PAYMENT (GPS FULLY REMOVED) ===================== */
+const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
+  const [isScanning, setIsScanning] = useState(false);
+  const [selectedMember, setSelectedMember] = useState(null);
+  const [amount, setAmount] = useState('');
+
+  const handleScan = async (result) => {
+    try {
+      const data = JSON.parse(result);
+      const { data: member, error } = await supabase.from('contributors').select('*').eq('id', data.id).single();
+      if (error || !member) { showToast("Invalid member card", "error"); return; }
+      setSelectedMember(member);
+      setAmount(member.expected_amount.toString());
+      setIsScanning(false);
+    } catch (e) { showToast("Scan failed", "error"); }
+  };
+
+  const handleSubmitPayment = async () => {
+    if (!amount || Number(amount) <= 0) return;
+
+    // NO GPS DATA SENT HERE
+    const { error } = await supabase.from('transactions').insert([{
+      contributor_id: selectedMember.id,
+      full_name: selectedMember.full_name,
+      registration_no: selectedMember.registration_no,
+      expected_amount: Number(selectedMember.expected_amount),
+      employee_id: profile.id,
+      employee_name: profile.full_name,
+      amount: Math.floor(Number(amount)),
+      ajo_owner_id: selectedMember.ajo_owner_id || 'admin'
+    }]);
+
+    if (error) {
+      showToast(error.message, "error");
+    } else {
+      showToast("Payment recorded", "success");
+      setSelectedMember(null);
+      onRefresh();
+    }
+  };
+
+  if (selectedMember) return (
+    <div style={{ ...styles.paymentModal, background: colors.card, borderColor: colors.primary }}>
+      <h2>{selectedMember.full_name}</h2>
+      <p>Daily Expected: ₦{selectedMember.expected_amount}</p>
+      <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ ...styles.bigInput, color: colors.text, borderColor: colors.primary }} autoFocus />
+      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+        <button onClick={handleSubmitPayment} style={{ ...styles.btnPrimary, background: colors.primary }}>Confirm</button>
+        <button onClick={() => setSelectedMember(null)} style={{ ...styles.btnSecondary, background: colors.cardAlt }}>Cancel</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ textAlign: 'center' }}>
+      {!isScanning ? <button onClick={() => setIsScanning(true)} style={{ ...styles.btnPrimary, background: colors.primary, padding: 50 }}><Camera size={40} /><br/>Scan Member Card</button> : 
+      <div style={styles.scannerBox}><Scanner onScan={(r) => { if (r?.[0]) handleScan(r[0].rawValue); }} /><button onClick={() => setIsScanning(false)} style={styles.closeBtn}><X /></button></div>}
+    </div>
+  );
+};
+
+/* ===================== UI COMPONENTS ===================== */
 
 const TransactionList = ({ transactions, colors }) => (
   <div>
@@ -152,10 +212,10 @@ const TransactionList = ({ transactions, colors }) => (
       transactions.map(t => (
         <div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
           <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: '600' }}>{t.full_name || t.contributor_name || 'Member'}</p>
-            <small style={{ color: colors.textSecondary, fontSize: 12 }}>{new Date(t.created_at).toLocaleString()}</small>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: '600' }}>{t.full_name || 'Member'}</p>
+            <small style={{ color: colors.textSecondary }}>{new Date(t.created_at).toLocaleString()}</small>
           </div>
-          <strong style={{ color: colors.primary, fontSize: 16 }}>₦{(t.amount || 0).toLocaleString()}</strong>
+          <strong style={{ color: colors.primary }}>₦{(t.amount || 0).toLocaleString()}</strong>
         </div>
       ))
     }
@@ -171,7 +231,7 @@ const MemberManagement = ({ members, onRefresh, showToast, colors, config, isAdm
   return (
     <div style={styles.fadeIn}>
       <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search members..." colors={colors} />
-      {isAdmin && <button onClick={() => setShowAddForm(true)} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15 }}><UserPlus size={18} /> Add New Member</button>}
+      {isAdmin && <button onClick={() => setShowAddForm(true)} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15 }}><UserPlus size={18} /> Add Member</button>}
       {showAddForm && <AddMemberForm onClose={() => setShowAddForm(false)} onSuccess={() => { setShowAddForm(false); onRefresh(); }} showToast={showToast} colors={colors} />}
       <div>{filtered.map(member => <MemberCard key={member.id} member={member} onPrint={() => setSelectedMember(member)} colors={colors} />)}</div>
       {selectedMember && <PrintCardModal member={selectedMember} config={config} onClose={() => setSelectedMember(null)} colors={colors} />}
@@ -196,79 +256,16 @@ const AddMemberForm = ({ onClose, onSuccess, showToast, colors }) => {
   return (
     <div style={{ ...styles.form, background: colors.card, borderColor: colors.primary }}>
       <form onSubmit={handleSubmit}>
-        <input name="name" placeholder="Full Name" style={{ ...styles.input, background: colors.bg, color: colors.text }} required />
-        <input name="regNumber" placeholder="Reg No" style={{ ...styles.input, background: colors.bg, color: colors.text }} required />
-        <input name="phone" placeholder="Phone" style={{ ...styles.input, background: colors.bg, color: colors.text }} required />
-        <input name="address" placeholder="Address" style={{ ...styles.input, background: colors.bg, color: colors.text }} required />
-        <input name="amount" type="number" placeholder="Daily Amount" style={{ ...styles.input, background: colors.bg, color: colors.text }} required />
-        <div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: colors.primary }}>Register</button><button type="button" onClick={onClose} style={{ ...styles.btnSecondary, background: colors.cardAlt }}>Cancel</button></div>
+        <input name="name" placeholder="Full Name" style={styles.input} required />
+        <input name="regNumber" placeholder="Reg No" style={styles.input} required />
+        <input name="phone" placeholder="Phone" style={styles.input} required />
+        <input name="address" placeholder="Address" style={styles.input} required />
+        <input name="amount" type="number" placeholder="Daily Amount" style={styles.input} required />
+        <div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: colors.primary }}>Save</button><button type="button" onClick={onClose} style={styles.btnSecondary}>Cancel</button></div>
       </form>
     </div>
   );
 };
-
-/* ===================== SCANNER & PAYMENT (GPS REMOVED) ===================== */
-const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
-  const [isScanning, setIsScanning] = useState(false);
-  const [selectedMember, setSelectedMember] = useState(null);
-  const [amount, setAmount] = useState('');
-
-  const handleScan = async (result) => {
-    try {
-      const data = JSON.parse(result);
-      const { data: member, error } = await supabase.from('contributors').select('*').eq('id', data.id).single();
-      if (error || !member) { showToast("Invalid member card", "error"); return; }
-      setSelectedMember(member);
-      setAmount(member.expected_amount.toString());
-      setIsScanning(false);
-    } catch (e) { showToast("Scan error", "error"); }
-  };
-
-  const handleSubmitPayment = async () => {
-    if (!amount || Number(amount) <= 0) return;
-
-    // GPS Columns removed from payload
-    const { error } = await supabase.from('transactions').insert([{
-      contributor_id: selectedMember.id,
-      full_name: selectedMember.full_name,
-      registration_no: selectedMember.registration_no,
-      expected_amount: Number(selectedMember.expected_amount),
-      employee_id: profile.id,
-      employee_name: profile.full_name,
-      amount: Math.floor(Number(amount)),
-      ajo_owner_id: selectedMember.ajo_owner_id || 'admin'
-    }]);
-
-    if (error) {
-      showToast(error.message, "error");
-    } else {
-      showToast("Payment recorded", "success");
-      setSelectedMember(null);
-      onRefresh();
-    }
-  };
-
-  if (selectedMember) return (
-    <div style={{ ...styles.paymentModal, background: colors.card, borderColor: colors.primary }}>
-      <h2>{selectedMember.full_name}</h2>
-      <p>Expected: ₦{selectedMember.expected_amount}</p>
-      <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ ...styles.bigInput, color: colors.text, borderColor: colors.primary }} autoFocus />
-      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-        <button onClick={handleSubmitPayment} style={{ ...styles.btnPrimary, background: colors.primary }}>Confirm</button>
-        <button onClick={() => setSelectedMember(null)} style={{ ...styles.btnSecondary, background: colors.cardAlt }}>Cancel</button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={{ textAlign: 'center' }}>
-      {!isScanning ? <button onClick={() => setIsScanning(true)} style={{ ...styles.btnPrimary, background: colors.primary, padding: 50 }}><Camera size={40} /><br/>Scan Card</button> : 
-      <div style={styles.scannerBox}><Scanner onScan={(r) => { if (r?.[0]) handleScan(r[0].rawValue); }} /><button onClick={() => setIsScanning(false)} style={styles.closeBtn}><X /></button></div>}
-    </div>
-  );
-};
-
-/* ===================== SHARED UI COMPONENTS ===================== */
 
 const Header = ({ business, role, isDark, onToggleTheme, colors }) => (
   <header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}>
@@ -402,8 +399,6 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
 const LoadingSpinner = () => <div style={{ textAlign: 'center', padding: 40 }}><RefreshCw size={32} style={{ animation: 'spin 1s linear infinite' }} /></div>;
 const EmptyState = ({ message, colors }) => <div style={{ textAlign: 'center', padding: 40, color: colors.textSecondary }}><AlertCircle size={48} style={{ opacity: 0.3, marginBottom: 10 }} /><p>{message}</p></div>;
 const ToastContainer = ({ toasts }) => <div style={styles.toastContainer}>{toasts.map(t => (<div key={t.id} style={{ ...styles.toast, background: t.type === 'error' ? '#ef4444' : '#10b981' }}>{t.message}</div>))}</div>;
-
-/* ===================== THEME & STYLES ===================== */
 
 const DARK_THEME = { bg: '#020617', card: '#0f172a', text: '#f8fafc', textSecondary: '#94a3b8', border: '#1e293b', primary: '#3b82f6' };
 const LIGHT_THEME = { bg: '#f1f5f9', card: '#ffffff', text: '#0f172a', textSecondary: '#64748b', border: '#e2e8f0', primary: '#2563eb' };
