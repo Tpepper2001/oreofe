@@ -1,447 +1,1299 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import {
-  Users, UserPlus, LayoutDashboard, LogOut, CheckCircle, Landmark, X, Camera, 
-  RefreshCw, Trash2, DollarSign, Search, Phone, MapPin, Printer, History, 
-  AlertCircle, Moon, Sun, Wallet, ArrowUpRight, Ban, UserCheck
+  Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
+  RefreshCw, Printer, AlertCircle, Moon, Sun, UserCheck, Search,
+  TrendingUp, Calendar, Download, Filter, Eye, EyeOff
 } from 'lucide-react';
 
-/* ===================== CONFIG ===================== */
-const SUPABASE_URL = 'https://watrosnylvkiuvuptdtp.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdHJvc255bHZraXV2dXB0ZHRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5MzE2NzEsImV4cCI6MjA4MjUwNzY3MX0.ku6_Ngf2JRJ8fxLs_Q-EySgCU37MjUK3WofpO9bazds';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const BUSINESS = {
-  name: "ORE-OFE OLUWA",
-  address: "No. 1, Bisiriyu Owokade Street, Molete, Lagos.",
-  phones: "08107218385, 08027203601",
-  commission_rate: 0.05
+/* ===================== CONFIGURATION ===================== */
+const CONFIG = {
+  supabase: {
+    url: 'https://watrosnylvkiuvuptdtp.supabase.co',
+    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdHJvc255bHZraXV2dXB0ZHRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5MzE2NzEsImV4cCI6MjA4MjUwNzY3MX0.ku6_Ngf2JRJ8fxLs_Q-EySgCU37MjUK3WofpO9bazds'
+  },
+  business: {
+    name: "ORE-OFE OLUWA",
+    address: "No. 1, Bisiriyu Owokade Street, Molete, Lagos.",
+    phones: "08107218385, 08027203601",
+    commissionRate: 0.05
+  },
+  admin: {
+    username: 'oreofe',
+    password: 'oreofe'
+  }
 };
 
+const supabase = createClient(CONFIG.supabase.url, CONFIG.supabase.key);
+
+/* ===================== MAIN APP ===================== */
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
+  const [auth, setAuth] = useState(null);
   const [view, setView] = useState('dashboard');
-  const [members, setMembers] = useState([]);
-  const [agents, setAgents] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isDark, setIsDark] = useState(true);
+  const [data, setData] = useState({ members: [], agents: [], transactions: [] });
+  const [loading, setLoading] = useState(false);
+  const [theme, setTheme] = useState('dark');
   const [toasts, setToasts] = useState([]);
 
-  // Toast Helper
-  const toast = (msg, type = 'info') => {
+  const showToast = useCallback((message, type = 'info') => {
     const id = Date.now();
-    setToasts(prev => [...prev, { id, msg, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
-  };
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    if (!auth) return;
+    
     setLoading(true);
     try {
-      const [m, t, a] = await Promise.all([
+      const [membersRes, transactionsRes, agentsRes] = await Promise.all([
         supabase.from('contributors').select('*').order('full_name'),
         supabase.from('transactions').select('*').order('created_at', { ascending: false }),
         supabase.from('employees').select('*').order('full_name')
       ]);
-      setMembers(m.data || []);
-      setTransactions(t.data || []);
-      setAgents(a.data || []);
-    } catch (e) { toast("Error fetching data", "error"); }
-    setLoading(false);
-  };
 
-  useEffect(() => { if (user) fetchData(); }, [user]);
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    const u = e.target.username.value.trim().toLowerCase();
-    const p = e.target.password.value;
-
-    if (u === 'oreofe' && p === 'oreofe') {
-      setUser({ id: 'admin' });
-      setProfile({ full_name: 'Oreofe Admin', role: 'admin' });
-      toast("Admin Access Granted", "success");
-    } else {
-      const { data } = await supabase.from('employees').select('*').eq('employee_id_number', u).eq('password', p).single();
-      if (data) {
-        setUser({ id: data.id });
-        setProfile({ ...data, role: 'agent' });
-        toast(`Welcome, ${data.full_name}`, "success");
-      } else {
-        toast("Invalid Credentials", "error");
-      }
+      setData({
+        members: membersRes.data || [],
+        transactions: transactionsRes.data || [],
+        agents: agentsRes.data || []
+      });
+    } catch (error) {
+      showToast("Failed to fetch data", "error");
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  }, [auth, showToast]);
+
+  useEffect(() => {
+    if (auth) fetchData();
+  }, [auth, fetchData]);
+
+  const handleLogin = async (credentials) => {
+    setLoading(true);
+    
+    const { username, password } = credentials;
+    const normalizedUsername = username.trim().toLowerCase();
+
+    try {
+      // Check admin credentials
+      if (normalizedUsername === CONFIG.admin.username && password === CONFIG.admin.password) {
+        setAuth({ id: 'admin', role: 'admin', name: 'Oreofe Admin' });
+        showToast("Admin access granted", "success");
+        return;
+      }
+
+      // Check agent credentials
+      const { data: agent, error } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('employee_id_number', normalizedUsername)
+        .eq('password', password)
+        .single();
+
+      if (error || !agent) {
+        showToast("Invalid credentials", "error");
+        return;
+      }
+
+      setAuth({ id: agent.id, role: 'agent', name: agent.full_name, data: agent });
+      showToast(`Welcome back, ${agent.full_name}`, "success");
+    } catch (error) {
+      showToast("Login failed", "error");
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (!user) return <LoginScreen onLogin={handleLogin} loading={loading} />;
+  const handleLogout = () => {
+    setAuth(null);
+    setView('dashboard');
+    setData({ members: [], agents: [], transactions: [] });
+  };
 
-  const theme = isDark ? darkTheme : lightTheme;
+  if (!auth) {
+    return <LoginScreen onLogin={handleLogin} loading={loading} theme={theme} />;
+  }
+
+  const isDark = theme === 'dark';
+  const colors = isDark ? DARK_THEME : LIGHT_THEME;
 
   return (
-    <div style={{ ...styles.app, background: theme.bg, color: theme.text }}>
-      <header style={{ ...styles.header, background: theme.card, borderBottom: `1px solid ${theme.border}` }}>
-        <div>
-          <h1 style={{ ...styles.brand, color: theme.primary }}>{BUSINESS.name}</h1>
-          <p style={styles.subBrand}>{profile?.role.toUpperCase()} MODE</p>
-        </div>
-        <button onClick={() => setIsDark(!isDark)} style={styles.iconBtn}>
-          {isDark ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
-      </header>
+    <div style={{ ...styles.app, background: colors.bg, color: colors.text }}>
+      <Header 
+        business={CONFIG.business.name}
+        role={auth.role}
+        isDark={isDark}
+        onToggleTheme={() => setTheme(isDark ? 'light' : 'dark')}
+        colors={colors}
+      />
 
       <main style={styles.main}>
-        {loading ? <SkeletonLoader /> : (
-          profile?.role === 'admin' ? 
-            <AdminPortal view={view} members={members} agents={agents} transactions={transactions} onRefresh={fetchData} toast={toast} /> :
-            <AgentPortal view={view} profile={profile} members={members} transactions={transactions} onRefresh={fetchData} toast={toast} />
+        {loading && <LoadingSpinner />}
+        
+        {!loading && auth.role === 'admin' && (
+          <AdminPortal
+            view={view}
+            data={data}
+            onRefresh={fetchData}
+            showToast={showToast}
+            colors={colors}
+            config={CONFIG.business}
+          />
+        )}
+
+        {!loading && auth.role === 'agent' && (
+          <AgentPortal
+            view={view}
+            profile={auth.data}
+            data={data}
+            onRefresh={fetchData}
+            showToast={showToast}
+            colors={colors}
+            config={CONFIG.business}
+          />
         )}
       </main>
 
-      <nav style={{ ...styles.nav, background: theme.card, borderTop: `1px solid ${theme.border}` }}>
-        <NavBtn act={view === 'dashboard'} icon={<LayoutDashboard size={20}/>} lab="Home" onClick={() => setView('dashboard')} />
-        <NavBtn act={view === 'members'} icon={<Users size={20}/>} lab="Members" onClick={() => setView('members')} />
-        
-        {profile?.role === 'admin' && (
-          <NavBtn act={view === 'agents'} icon={<UserCheck size={20}/>} lab="Agents" onClick={() => setView('agents')} />
-        )}
-
-        {profile?.role === 'agent' && (
-           <NavBtn act={view === 'scan'} icon={<Camera size={20}/>} lab="Scan" onClick={() => setView('scan')} />
-        )}
-
-        <NavBtn act={false} icon={<LogOut size={20}/>} lab="Exit" onClick={() => setUser(null)} />
-      </nav>
+      <Navigation
+        view={view}
+        role={auth.role}
+        onNavigate={setView}
+        onLogout={handleLogout}
+        colors={colors}
+      />
 
       <ToastContainer toasts={toasts} />
     </div>
   );
 }
 
-/* ==================== PORTALS ==================== */
+/* ===================== PORTALS ===================== */
 
-const AdminPortal = ({ view, members, agents, transactions, onRefresh, toast }) => {
-  const today = new Date().toISOString().slice(0, 10);
-  const todayRev = transactions.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0);
+const AdminPortal = ({ view, data, onRefresh, showToast, colors, config }) => {
+  const stats = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const todayTransactions = data.transactions.filter(t => t.created_at.startsWith(today));
+    const todayRevenue = todayTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const totalRevenue = data.transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    
+    return { todayRevenue, totalRevenue, todayCount: todayTransactions.length };
+  }, [data.transactions]);
 
-  if (view === 'dashboard') return (
-    <div style={styles.fadeIn}>
-      <div style={styles.grid}>
-        <div style={styles.statCard}><h2>₦{todayRev.toLocaleString()}</h2><p>Today Total</p></div>
-        <div style={styles.statCard}><h2>{members.length}</h2><p>Active Members</p></div>
+  if (view === 'dashboard') {
+    return (
+      <div style={styles.fadeIn}>
+        <DashboardStats stats={stats} memberCount={data.members.length} colors={colors} />
+        <SectionHeader title="Recent Collections" icon={<TrendingUp size={20} />} />
+        <TransactionList transactions={data.transactions.slice(0, 15)} colors={colors} />
       </div>
-      <h3 style={{margin: '25px 0 10px'}}>Global Collections</h3>
-      <TransactionHistory transactions={transactions.slice(0, 10)} />
-    </div>
-  );
+    );
+  }
 
-  if (view === 'members') return <MemberDirectory members={members} onRefresh={onRefresh} toast={toast} isAdmin={true} />;
-  if (view === 'agents') return <AgentManagement agents={agents} onRefresh={onRefresh} toast={toast} />;
-  return <TransactionHistory transactions={transactions} />;
+  if (view === 'members') {
+    return (
+      <MemberManagement
+        members={data.members}
+        onRefresh={onRefresh}
+        showToast={showToast}
+        colors={colors}
+        config={config}
+        isAdmin={true}
+      />
+    );
+  }
+
+  if (view === 'agents') {
+    return (
+      <AgentManagement
+        agents={data.agents}
+        transactions={data.transactions}
+        onRefresh={onRefresh}
+        showToast={showToast}
+        colors={colors}
+      />
+    );
+  }
+
+  return null;
 };
 
-const AgentPortal = ({ view, profile, members, transactions, onRefresh, toast }) => {
-  const myLogs = transactions.filter(t => t.employee_id === profile.id);
-  const todayTotal = myLogs.filter(t => t.created_at.startsWith(new Date().toISOString().slice(0, 10))).reduce((s, t) => s + (t.amount || 0), 0);
+const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, config }) => {
+  const stats = useMemo(() => {
+    const myTransactions = data.transactions.filter(t => t.employee_id === profile.id);
+    const today = new Date().toISOString().slice(0, 10);
+    const todayTransactions = myTransactions.filter(t => t.created_at.startsWith(today));
+    const todayTotal = todayTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const todayCommission = todayTotal * config.commissionRate;
+    const totalCollected = myTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    
+    return { todayTotal, todayCommission, totalCollected, todayCount: todayTransactions.length };
+  }, [data.transactions, profile.id, config.commissionRate]);
 
-  if (view === 'dashboard') return (
-    <div style={styles.fadeIn}>
-      <div style={styles.heroCard}>
-        <small>YOUR COLLECTIONS TODAY</small>
-        <h1>₦{todayTotal.toLocaleString()}</h1>
-        <div style={styles.heroLine} />
-        <small>COMMISSION: ₦{(todayTotal * BUSINESS.commission_rate).toLocaleString()}</small>
+  if (view === 'dashboard') {
+    return (
+      <div style={styles.fadeIn}>
+        <AgentDashboard stats={stats} colors={colors} />
+        <SectionHeader title="Your Recent Collections" icon={<Calendar size={20} />} />
+        <TransactionList 
+          transactions={data.transactions.filter(t => t.employee_id === profile.id).slice(0, 10)} 
+          colors={colors} 
+        />
       </div>
-      <h3 style={{margin: '20px 0'}}>Your Recent Log</h3>
-      <TransactionHistory transactions={myLogs.slice(0, 5)} />
-    </div>
-  );
+    );
+  }
 
-  if (view === 'members') return <MemberDirectory members={members} onRefresh={onRefresh} toast={toast} isAdmin={false} />;
-  if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} toast={toast} />;
+  if (view === 'members') {
+    return (
+      <MemberManagement
+        members={data.members}
+        onRefresh={onRefresh}
+        showToast={showToast}
+        colors={colors}
+        config={config}
+        isAdmin={false}
+      />
+    );
+  }
+
+  if (view === 'scan') {
+    return (
+      <ScannerView
+        profile={profile}
+        onRefresh={onRefresh}
+        showToast={showToast}
+        colors={colors}
+      />
+    );
+  }
+
+  return null;
 };
 
-/* ==================== COMPONENTS ==================== */
+/* ===================== COMPONENTS ===================== */
 
-const ScannerView = ({ profile, onRefresh, toast }) => {
-  const [scanning, setScanning] = useState(false);
-  const [member, setMember] = useState(null);
-  const [amount, setAmount] = useState('');
-
-  const handleScan = async (data) => {
-    try {
-      const parsed = JSON.parse(data);
-      const { data: mem } = await supabase.from('contributors').select('*').eq('id', parsed.id).single();
-      if (!mem) throw new Error();
-      setMember(mem); setAmount(mem.expected_amount); setScanning(false);
-    } catch (e) { toast("Invalid Card", "error"); }
-  };
-
-  const submitPayment = async () => {
-    const pay = Number(amount);
-    const { error } = await supabase.from('transactions').insert([{
-      contributor_id: member.id, contributor_name: member.full_name,
-      employee_id: profile.id, amount: pay, ajo_owner_id: 'admin'
-    }]);
-
-    if (!error) {
-      toast("Collection Recorded!", "success");
-      setMember(null); onRefresh();
-    }
-  };
-
-  if (member) return (
-    <div style={styles.paymentModal}>
-      <h2>{member.full_name}</h2>
-      <p>Target: ₦{member.expected_amount}</p>
-      <input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={styles.bigInput} />
-      <div style={{display: 'flex', gap: 10, marginTop: 20}}>
-        <button onClick={submitPayment} style={{...styles.btnP, flex: 1}}>CONFIRM</button>
-        <button onClick={() => setMember(null)} style={{...styles.btnS, flex: 1}}>CANCEL</button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={{textAlign: 'center'}}>
-      {!scanning ? (
-        <button onClick={() => setScanning(true)} style={{...styles.btnP, width: '100%', padding: 40}}>
-           <Camera size={32}/><br/>TAP TO SCAN CARD
-        </button>
-      ) : (
-        <div style={styles.scanBox}>
-          <Scanner onScan={(d) => d[0] && handleScan(d[0].rawValue)} />
-          <button onClick={() => setScanning(false)} style={styles.closeBtn}><X/></button>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const MemberDirectory = ({ members, onRefresh, toast, isAdmin }) => {
-  const [query, setQuery] = useState('');
-  const [showAdd, setShowAdd] = useState(false);
-  const [selected, setSelected] = useState(null);
-
-  const filtered = members.filter(m => m.full_name.toLowerCase().includes(query.toLowerCase()));
-
-  return (
+const Header = ({ business, role, isDark, onToggleTheme, colors }) => (
+  <header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}>
     <div>
-      <div style={styles.searchBox}>
-        <Search size={18} color="#64748b" />
-        <input placeholder="Search member..." value={query} onChange={e => setQuery(e.target.value)} style={styles.searchIn} />
-      </div>
-
-      {isAdmin && (
-        <button onClick={() => setShowAdd(true)} style={{...styles.btnP, width: '100%', marginBottom: 15}}><UserPlus size={18}/> New Member</button>
-      )}
-
-      {showAdd && <AddMemberForm onRefresh={onRefresh} onClose={() => setShowAdd(false)} toast={toast} />}
-
-      {filtered.map(m => (
-        <div key={m.id} style={styles.item}>
-          <div>
-            <p style={{margin: 0, fontWeight: 'bold'}}>{m.full_name}</p>
-            <small style={{color: '#3b82f6'}}>{m.registration_number}</small>
-          </div>
-          <button onClick={() => setSelected(m)} style={styles.iconBtn}><Printer/></button>
-        </div>
-      ))}
-      {selected && <PrintCard member={selected} onClose={() => setSelected(null)} />}
+      <h1 style={{ ...styles.brand, color: colors.primary }}>{business}</h1>
+      <p style={{ ...styles.subBrand, color: colors.textSecondary }}>
+        {role.toUpperCase()} PORTAL
+      </p>
     </div>
-  );
-};
-
-const AgentManagement = ({ agents, onRefresh, toast }) => {
-  const [showAdd, setShowAdd] = useState(false);
-
-  const handleAdd = async (e) => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    const { error } = await supabase.from('employees').insert([{
-      full_name: f.get('n'),
-      employee_id_number: f.get('id'),
-      password: f.get('p'),
-      ajo_owner_id: 'admin'
-    }]);
-    if (!error) { setShowAdd(false); onRefresh(); toast("Agent Registered", "success"); }
-    else toast("Error registering agent", "error");
-  };
-
-  return (
-    <div>
-      <button onClick={() => setShowAdd(true)} style={{...styles.btnP, width: '100%', marginBottom: 15}}>Register New Agent</button>
-      {showAdd && (
-        <form onSubmit={handleAdd} style={styles.form}>
-          <input name="n" placeholder="Full Name" style={styles.input} required />
-          <input name="id" placeholder="Login ID" style={styles.input} required />
-          <input name="p" placeholder="Password" style={styles.input} required />
-          <button type="submit" style={styles.btnP}>Save Agent</button>
-        </form>
-      )}
-      {agents.map(a => (
-        <div key={a.id} style={styles.item}>
-          <span>{a.full_name}</span>
-          <small>ID: {a.employee_id_number}</small>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const TransactionHistory = ({ transactions }) => (
-  <div>
-    {transactions.map(t => (
-      <div key={t.id} style={styles.item}>
-        <div>
-          <p style={{margin: 0, fontSize: 14}}>{t.contributor_name}</p>
-          <small style={{color: '#64748b'}}>{new Date(t.created_at).toLocaleString()}</small>
-        </div>
-        <strong>₦{t.amount}</strong>
-      </div>
-    ))}
-  </div>
+    <button onClick={onToggleTheme} style={{ ...styles.iconBtn, color: colors.text }} aria-label="Toggle theme">
+      {isDark ? <Sun size={22} /> : <Moon size={22} />}
+    </button>
+  </header>
 );
 
-const AddMemberForm = ({ onRefresh, onClose, toast }) => {
-  const submit = async (e) => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    const { error } = await supabase.from('contributors').insert([{
-      full_name: f.get('n'), registration_number: f.get('r'),
-      phone_number: f.get('p'), address: f.get('a'),
-      expected_amount: Number(f.get('m')), ajo_owner_id: 'admin'
-    }]);
-    if (!error) { onClose(); onRefresh(); toast("Member Added", "success"); }
-  };
-  return (
-    <form onSubmit={submit} style={styles.form}>
-      <input name="n" placeholder="Member Full Name" style={styles.input} required />
-      <input name="r" placeholder="Registration Number" style={styles.input} required />
-      <input name="p" placeholder="Phone Number" style={styles.input} required />
-      <input name="a" placeholder="Address" style={styles.input} required />
-      <input name="m" type="number" placeholder="Daily Contribution (₦)" style={styles.input} required />
-      <button type="submit" style={styles.btnP}>Confirm Registration</button>
-      <button type="button" onClick={onClose} style={{...styles.btnS, marginLeft: 10}}>Cancel</button>
-    </form>
-  );
-};
+const Navigation = ({ view, role, onNavigate, onLogout, colors }) => (
+  <nav style={{ ...styles.nav, background: colors.card, borderTop: `1px solid ${colors.border}` }}>
+    <NavButton
+      active={view === 'dashboard'}
+      icon={<LayoutDashboard size={20} />}
+      label="Home"
+      onClick={() => onNavigate('dashboard')}
+      colors={colors}
+    />
+    <NavButton
+      active={view === 'members'}
+      icon={<Users size={20} />}
+      label="Members"
+      onClick={() => onNavigate('members')}
+      colors={colors}
+    />
+    {role === 'admin' && (
+      <NavButton
+        active={view === 'agents'}
+        icon={<UserCheck size={20} />}
+        label="Agents"
+        onClick={() => onNavigate('agents')}
+        colors={colors}
+      />
+    )}
+    {role === 'agent' && (
+      <NavButton
+        active={view === 'scan'}
+        icon={<Camera size={20} />}
+        label="Scan"
+        onClick={() => onNavigate('scan')}
+        colors={colors}
+      />
+    )}
+    <NavButton
+      active={false}
+      icon={<LogOut size={20} />}
+      label="Exit"
+      onClick={onLogout}
+      colors={colors}
+    />
+  </nav>
+);
 
-const PrintCard = ({ member, onClose }) => {
-  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(JSON.stringify({ id: member.id }))}`;
-  return (
-    <div style={styles.overlay}>
-      <div style={styles.cardPrint} id="card">
-        <div style={{padding: 10, borderBottom: '1px solid #000'}}>
-          <h4 style={{margin: 0}}>{BUSINESS.name}</h4>
-          <p style={{fontSize: 7, margin: 0}}>{BUSINESS.address}</p>
-        </div>
-        <div style={{display: 'flex', padding: 10, alignItems: 'center', gap: 10}}>
-          <img src={qr} alt="QR" style={{width: 80}} />
-          <div style={{fontSize: 8, textAlign: 'left', lineHeight: 1.4}}>
-            <p><strong>NAME:</strong> {member.full_name}</p>
-            <p><strong>REG:</strong> {member.registration_number}</p>
-            <p><strong>TEL:</strong> {member.phone_number}</p>
-          </div>
-        </div>
-        <div style={{background: '#000', color: '#fff', fontSize: 8, padding: 2}}>MEMBERSHIP ID</div>
-      </div>
-      <div style={{marginTop: 20, display: 'flex', gap: 10}}>
-        <button onClick={() => window.print()} style={styles.btnP}>PRINT</button>
-        <button onClick={onClose} style={styles.btnS}>CLOSE</button>
-      </div>
-    </div>
-  );
-};
-
-/* ==================== UI STUFF ==================== */
-
-const NavBtn = ({ act, icon, lab, onClick }) => (
-  <button onClick={onClick} style={act ? styles.navActive : styles.navBtn}>
-    {icon} <span>{lab}</span>
+const NavButton = ({ active, icon, label, onClick, colors }) => (
+  <button
+    onClick={onClick}
+    style={{
+      ...styles.navBtn,
+      color: active ? colors.primary : colors.textSecondary,
+      fontWeight: active ? 'bold' : 'normal'
+    }}
+    aria-label={label}
+  >
+    {icon}
+    <span style={{ fontSize: 11 }}>{label}</span>
   </button>
 );
 
+const DashboardStats = ({ stats, memberCount, colors }) => (
+  <div style={styles.statsGrid}>
+    <StatCard
+      title="Today's Revenue"
+      value={`₦${stats.todayRevenue.toLocaleString()}`}
+      subtitle={`${stats.todayCount} collections`}
+      colors={colors}
+      gradient={true}
+    />
+    <StatCard
+      title="Active Members"
+      value={memberCount}
+      subtitle="registered"
+      colors={colors}
+    />
+    <StatCard
+      title="Total Revenue"
+      value={`₦${stats.totalRevenue.toLocaleString()}`}
+      subtitle="all time"
+      colors={colors}
+    />
+  </div>
+);
+
+const AgentDashboard = ({ stats, colors }) => (
+  <div>
+    <div style={{ ...styles.heroCard, background: `linear-gradient(135deg, ${colors.primary}, ${colors.primaryDark})` }}>
+      <small style={{ opacity: 0.8, fontSize: 11 }}>YOUR COLLECTIONS TODAY</small>
+      <h1 style={{ margin: '10px 0', fontSize: 36 }}>₦{stats.todayTotal.toLocaleString()}</h1>
+      <div style={{ height: 1, background: 'rgba(255,255,255,0.2)', margin: '15px 0' }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+        <span>Commission: ₦{stats.todayCommission.toLocaleString()}</span>
+        <span>{stats.todayCount} collections</span>
+      </div>
+    </div>
+    
+    <div style={{ ...styles.statsGrid, marginTop: 15 }}>
+      <StatCard
+        title="Total Collected"
+        value={`₦${stats.totalCollected.toLocaleString()}`}
+        subtitle="lifetime"
+        colors={colors}
+      />
+    </div>
+  </div>
+);
+
+const StatCard = ({ title, value, subtitle, colors, gradient }) => (
+  <div style={{
+    ...styles.statCard,
+    background: gradient ? `linear-gradient(135deg, ${colors.cardAlt}, ${colors.card})` : colors.card,
+    borderColor: colors.border
+  }}>
+    <p style={{ margin: 0, fontSize: 12, color: colors.textSecondary }}>{title}</p>
+    <h2 style={{ margin: '8px 0', fontSize: 28, color: colors.text }}>{value}</h2>
+    <small style={{ color: colors.textSecondary, fontSize: 11 }}>{subtitle}</small>
+  </div>
+);
+
+const SectionHeader = ({ title, icon }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '25px 0 15px' }}>
+    {icon}
+    <h3 style={{ margin: 0, fontSize: 16 }}>{title}</h3>
+  </div>
+);
+
+const TransactionList = ({ transactions, colors }) => (
+  <div>
+    {transactions.length === 0 ? (
+      <EmptyState message="No transactions yet" colors={colors} />
+    ) : (
+      transactions.map(t => (
+        <div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: '600' }}>{t.contributor_name}</p>
+            <small style={{ color: colors.textSecondary, fontSize: 12 }}>
+              {new Date(t.created_at).toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </small>
+          </div>
+          <strong style={{ color: colors.primary, fontSize: 16 }}>₦{t.amount.toLocaleString()}</strong>
+        </div>
+      ))
+    )}
+  </div>
+);
+
+const MemberManagement = ({ members, onRefresh, showToast, colors, config, isAdmin }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [selectedMember, setSelectedMember] = useState(null);
+
+  const filteredMembers = useMemo(() => {
+    return members.filter(m =>
+      m.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.registration_number.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [members, searchQuery]);
+
+  return (
+    <div style={styles.fadeIn}>
+      <SearchBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search members..."
+        colors={colors}
+      />
+
+      {isAdmin && (
+        <button
+          onClick={() => setShowAddForm(true)}
+          style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15 }}
+        >
+          <UserPlus size={18} /> Add New Member
+        </button>
+      )}
+
+      {showAddForm && (
+        <AddMemberForm
+          onClose={() => setShowAddForm(false)}
+          onSuccess={() => {
+            setShowAddForm(false);
+            onRefresh();
+            showToast("Member added successfully", "success");
+          }}
+          showToast={showToast}
+          colors={colors}
+        />
+      )}
+
+      <div>
+        {filteredMembers.length === 0 ? (
+          <EmptyState message="No members found" colors={colors} />
+        ) : (
+          filteredMembers.map(member => (
+            <MemberCard
+              key={member.id}
+              member={member}
+              onPrint={() => setSelectedMember(member)}
+              colors={colors}
+            />
+          ))
+        )}
+      </div>
+
+      {selectedMember && (
+        <PrintCardModal
+          member={selectedMember}
+          config={config}
+          onClose={() => setSelectedMember(null)}
+          colors={colors}
+        />
+      )}
+    </div>
+  );
+};
+
+const MemberCard = ({ member, onPrint, colors }) => (
+  <div style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
+    <div style={{ flex: 1 }}>
+      <p style={{ margin: 0, fontWeight: '600', fontSize: 15 }}>{member.full_name}</p>
+      <small style={{ color: colors.primary, fontSize: 12 }}>{member.registration_number}</small>
+      <div style={{ marginTop: 4, fontSize: 12, color: colors.textSecondary }}>
+        <div>📞 {member.phone_number}</div>
+        <div>💰 ₦{member.expected_amount.toLocaleString()}/daily</div>
+      </div>
+    </div>
+    <button onClick={onPrint} style={{ ...styles.iconBtn, color: colors.primary }} aria-label="Print card">
+      <Printer size={20} />
+    </button>
+  </div>
+);
+
+const SearchBar = ({ value, onChange, placeholder, colors }) => (
+  <div style={{ ...styles.searchBox, background: colors.card, borderColor: colors.border }}>
+    <Search size={18} color={colors.textSecondary} />
+    <input
+      type="text"
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ ...styles.searchInput, color: colors.text }}
+    />
+  </div>
+);
+
+const AddMemberForm = ({ onClose, onSuccess, showToast, colors }) => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+
+    const memberData = {
+      full_name: formData.get('name'),
+      registration_number: formData.get('regNumber'),
+      phone_number: formData.get('phone'),
+      address: formData.get('address'),
+      expected_amount: Number(formData.get('amount')),
+      ajo_owner_id: 'admin'
+    };
+
+    const { error } = await supabase.from('contributors').insert([memberData]);
+
+    if (error) {
+      showToast("Failed to add member", "error");
+      console.error(error);
+    } else {
+      onSuccess();
+    }
+  };
+
+  return (
+    <div style={{ ...styles.form, background: colors.card, borderColor: colors.primary }}>
+      <h3 style={{ marginTop: 0 }}>New Member Registration</h3>
+      <form onSubmit={handleSubmit}>
+        <input name="name" placeholder="Full Name" style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }} required />
+        <input name="regNumber" placeholder="Registration Number" style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }} required />
+        <input name="phone" placeholder="Phone Number" style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }} required />
+        <input name="address" placeholder="Address" style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }} required />
+        <input name="amount" type="number" placeholder="Daily Contribution (₦)" style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }} required />
+        
+        <div style={{ display: 'flex', gap: 10, marginTop: 15 }}>
+          <button type="submit" style={{ ...styles.btnPrimary, flex: 1, background: colors.primary }}>
+            Register Member
+          </button>
+          <button type="button" onClick={onClose} style={{ ...styles.btnSecondary, flex: 1, background: colors.cardAlt }}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const AgentManagement = ({ agents, transactions, onRefresh, showToast, colors }) => {
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  const agentStats = useMemo(() => {
+    return agents.map(agent => {
+      const agentTransactions = transactions.filter(t => t.employee_id === agent.id);
+      const totalCollected = agentTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+      return { ...agent, totalCollected, transactionCount: agentTransactions.length };
+    });
+  }, [agents, transactions]);
+
+  const handleAddAgent = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+
+    const agentData = {
+      full_name: formData.get('name'),
+      employee_id_number: formData.get('employeeId'),
+      password: formData.get('password'),
+      ajo_owner_id: 'admin'
+    };
+
+    const { error } = await supabase.from('employees').insert([agentData]);
+
+    if (error) {
+      showToast("Failed to register agent", "error");
+      console.error(error);
+    } else {
+      setShowAddForm(false);
+      onRefresh();
+      showToast("Agent registered successfully", "success");
+    }
+  };
+
+  return (
+    <div style={styles.fadeIn}>
+      <button
+        onClick={() => setShowAddForm(true)}
+        style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15 }}
+      >
+        <UserPlus size={18} /> Register New Agent
+      </button>
+
+      {showAddForm && (
+        <div style={{ ...styles.form, background: colors.card, borderColor: colors.primary }}>
+          <h3 style={{ marginTop: 0 }}>New Agent Registration</h3>
+          <form onSubmit={handleAddAgent}>
+            <input name="name" placeholder="Full Name" style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }} required />
+            <input name="employeeId" placeholder="Login ID" style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }} required />
+            <input name="password" type="password" placeholder="Password" style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }} required />
+            
+            <div style={{ display: 'flex', gap: 10, marginTop: 15 }}>
+              <button type="submit" style={{ ...styles.btnPrimary, flex: 1, background: colors.primary }}>
+                Register Agent
+              </button>
+              <button type="button" onClick={() => setShowAddForm(false)} style={{ ...styles.btnSecondary, flex: 1, background: colors.cardAlt }}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <SectionHeader title="Agent Performance" icon={<TrendingUp size={20} />} />
+      
+      <div>
+        {agentStats.map(agent => (
+          <div key={agent.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontWeight: '600', fontSize: 15 }}>{agent.full_name}</p>
+              <small style={{ color: colors.textSecondary, fontSize: 12 }}>ID: {agent.employee_id_number}</small>
+              <div style={{ marginTop: 8, fontSize: 13 }}>
+                <span style={{ color: colors.primary, fontWeight: '600' }}>
+                  ₦{agent.totalCollected.toLocaleString()}
+                </span>
+                <span style={{ color: colors.textSecondary, marginLeft: 10 }}>
+                  • {agent.transactionCount} collections
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
+  const [isScanning, setIsScanning] = useState(false);
+  const [selectedMember, setSelectedMember] = useState(null);
+  const [amount, setAmount] = useState('');
+
+  const handleScan = async (result) => {
+    try {
+      const data = JSON.parse(result);
+      const { data: member, error } = await supabase
+        .from('contributors')
+        .select('*')
+        .eq('id', data.id)
+        .single();
+
+      if (error || !member) {
+        showToast("Invalid member card", "error");
+        return;
+      }
+
+      setSelectedMember(member);
+      setAmount(member.expected_amount.toString());
+      setIsScanning(false);
+    } catch (error) {
+      showToast("Failed to scan card", "error");
+      console.error(error);
+    }
+  };
+
+  const handleSubmitPayment = async () => {
+    if (!amount || Number(amount) <= 0) {
+      showToast("Please enter a valid amount", "error");
+      return;
+    }
+
+    const transactionData = {
+      contributor_id: selectedMember.id,
+      contributor_name: selectedMember.full_name,
+      employee_id: profile.id,
+      amount: Number(amount),
+      ajo_owner_id: 'admin'
+    };
+
+    const { error } = await supabase.from('transactions').insert([transactionData]);
+
+    if (error) {
+      showToast("Failed to record payment", "error");
+      console.error(error);
+    } else {
+      showToast("Payment recorded successfully", "success");
+      setSelectedMember(null);
+      setAmount('');
+      onRefresh();
+    }
+  };
+
+  if (selectedMember) {
+    return (
+      <div style={{ ...styles.paymentModal, background: colors.card, borderColor: colors.primary }}>
+        <h2 style={{ marginTop: 0 }}>{selectedMember.full_name}</h2>
+        <p style={{ color: colors.textSecondary }}>
+          Expected: ₦{selectedMember.expected_amount.toLocaleString()}
+        </p>
+        
+        <div style={{ margin: '20px 0' }}>
+          <label style={{ display: 'block', marginBottom: 8, fontSize: 14, color: colors.textSecondary }}>
+            Amount Collected
+          </label>
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            style={{
+              ...styles.bigInput,
+              borderColor: colors.primary,
+              color: colors.text
+            }}
+            placeholder="0"
+            autoFocus
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={handleSubmitPayment}
+            style={{ ...styles.btnPrimary, flex: 1, background: colors.primary, padding: 15 }}
+          >
+            Confirm Payment
+          </button>
+          <button
+            onClick={() => setSelectedMember(null)}
+            style={{ ...styles.btnSecondary, flex: 1, background: colors.cardAlt, padding: 15 }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ textAlign: 'center' }}>
+      {!isScanning ? (
+        <button
+          onClick={() => setIsScanning(true)}
+          style={{
+            ...styles.btnPrimary,
+            background: colors.primary,
+            width: '100%',
+            padding: 50,
+            fontSize: 18
+          }}
+        >
+          <Camera size={40} style={{ marginBottom: 10 }} />
+          <div>Tap to Scan Member Card</div>
+        </button>
+      ) : (
+        <div style={styles.scannerBox}>
+          <Scanner
+            onScan={(results) => {
+              if (results && results[0]) {
+                handleScan(results[0].rawValue);
+              }
+            }}
+            constraints={{ facingMode: 'environment' }}
+          />
+          <button
+            onClick={() => setIsScanning(false)}
+            style={styles.closeBtn}
+            aria-label="Close scanner"
+          >
+            <X size={24} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PrintCardModal = ({ member, config, onClose, colors }) => {
+  const qrData = JSON.stringify({ id: member.id });
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}`;
+
+  return (
+    <div style={styles.overlay}>
+      <div style={styles.printCard} id="printable-card">
+        <div style={styles.cardHeader}>
+          <h4 style={{ margin: 0, fontSize: 14 }}>{config.name}</h4>
+          <p style={{ margin: '2px 0 0', fontSize: 8 }}>{config.address}</p>
+          <p style={{ margin: '2px 0 0', fontSize: 8 }}>Tel: {config.phones}</p>
+        </div>
+        
+        <div style={styles.cardBody}>
+          <img src={qrUrl} alt="Member QR Code" style={{ width: 100, height: 100 }} />
+          <div style={styles.cardInfo}>
+            <p><strong>NAME:</strong> {member.full_name}</p>
+            <p><strong>REG:</strong> {member.registration_number}</p>
+            <p><strong>TEL:</strong> {member.phone_number}</p>
+            <p><strong>DAILY:</strong> ₦{member.expected_amount.toLocaleString()}</p>
+          </div>
+        </div>
+        
+        <div style={styles.cardFooter}>
+          MEMBERSHIP ID CARD
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+        <button
+          onClick={() => window.print()}
+          style={{ ...styles.btnPrimary, background: colors.primary, padding: '12px 30px' }}
+        >
+          <Printer size={18} /> Print Card
+        </button>
+        <button
+          onClick={onClose}
+          style={{ ...styles.btnSecondary, background: colors.cardAlt, padding: '12px 30px' }}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const LoginScreen = ({ onLogin, loading, theme }) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const colors = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    onLogin({
+      username: formData.get('username'),
+      password: formData.get('password')
+    });
+  };
+
+  return (
+    <div style={{ ...styles.loginPage, background: colors.bg }}>
+      <div style={{ ...styles.loginCard, background: colors.card, borderColor: colors.border }}>
+        <Landmark size={48} color={colors.primary} style={{ marginBottom: 15 }} />
+        <h1 style={{ margin: 0, color: colors.text }}>{CONFIG.business.name}</h1>
+        <p style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 30 }}>
+          Management Portal
+        </p>
+
+        <form onSubmit={handleSubmit}>
+          <input
+            name="username"
+            type="text"
+            placeholder="Username / Employee ID"
+            style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }}
+            required
+            autoComplete="username"
+          />
+          
+          <div style={{ position: 'relative' }}>
+            <input
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password"
+              style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text, paddingRight: 45 }}
+              required
+              autoComplete="current-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={{
+                position: 'absolute',
+                right: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                color: colors.textSecondary,
+                cursor: 'pointer'
+              }}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              ...styles.btnPrimary,
+              background: loading ? colors.cardAlt : colors.primary,
+              width: '100%',
+              padding: 15,
+              fontSize: 15,
+              cursor: loading ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {loading ? 'Signing in...' : 'Sign In'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const LoadingSpinner = () => (
+  <div style={{ textAlign: 'center', padding: 40 }}>
+    <RefreshCw size={32} style={{ animation: 'spin 1s linear infinite' }} />
+    <p style={{ marginTop: 10, color: '#64748b' }}>Loading...</p>
+  </div>
+);
+
+const EmptyState = ({ message, colors }) => (
+  <div style={{ textAlign: 'center', padding: 40, color: colors.textSecondary }}>
+    <AlertCircle size={48} style={{ opacity: 0.3, marginBottom: 15 }} />
+    <p>{message}</p>
+  </div>
+);
+
 const ToastContainer = ({ toasts }) => (
-  <div style={styles.toastWrap}>
-    {toasts.map(t => (
-      <div key={t.id} style={{ ...styles.toast, background: t.type === 'error' ? '#ef4444' : '#10b981' }}>
-        {t.msg}
+  <div style={styles.toastContainer}>
+    {toasts.map(toast => (
+      <div
+        key={toast.id}
+        style={{
+          ...styles.toast,
+          background: toast.type === 'error' ? '#ef4444' : toast.type === 'success' ? '#10b981' : '#3b82f6'
+        }}
+      >
+        {toast.message}
       </div>
     ))}
   </div>
 );
 
-const LoginScreen = ({ onLogin, loading }) => (
-  <div style={styles.loginPage}>
-    <div style={styles.loginCard}>
-      <Landmark size={48} color="#3b82f6" style={{marginBottom: 10}}/>
-      <h1 style={{margin: 0}}>{BUSINESS.name}</h1>
-      <p style={{fontSize: 12, color: '#64748b', marginBottom: 30}}>Management Portal</p>
-      <form onSubmit={onLogin}>
-        <input name="username" placeholder="Username / ID" style={styles.input} required />
-        <input name="password" type="password" placeholder="Password" style={styles.input} required />
-        <button type="submit" style={{...styles.btnP, width: '100%', padding: 15}} disabled={loading}>
-          {loading ? 'WAIT...' : 'SIGN IN'}
-        </button>
-      </form>
-    </div>
-  </div>
-);
-
-const SkeletonLoader = () => (
-  <div style={{padding: 20}}>
-    {[1,2,3,4].map(i => <div key={i} style={styles.skeleton} />)}
-  </div>
-);
-
-/* ==================== STYLES ==================== */
-const darkTheme = { bg: '#020617', card: '#0f172a', text: '#f8fafc', border: '#1e293b', primary: '#3b82f6' };
-const lightTheme = { bg: '#f1f5f9', card: '#ffffff', text: '#0f172a', border: '#e2e8f0', primary: '#2563eb' };
-
-const styles = {
-  app: { minHeight: '100vh', transition: 'all 0.3s' },
-  header: { padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  brand: { fontSize: 18, fontWeight: 900, margin: 0 },
-  subBrand: { fontSize: 9, margin: 0, color: '#64748b' },
-  main: { padding: 20, paddingBottom: 100 },
-  heroCard: { background: 'linear-gradient(135deg, #1e40af, #3b82f6)', padding: 25, borderRadius: 20, color: '#fff' },
-  heroLine: { height: 1, background: 'rgba(255,255,255,0.1)', margin: '15px 0' },
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
-  statCard: { background: '#0f172a', padding: 20, borderRadius: 15, border: '1px solid #1e293b', textAlign: 'center' },
-  item: { background: '#0f172a', padding: 15, borderRadius: 12, border: '1px solid #1e293b', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  nav: { position: 'fixed', bottom: 0, width: '100%', display: 'flex', justifyContent: 'space-around', padding: '12px 0' },
-  navBtn: { background: 'none', border: 'none', color: '#64748b', fontSize: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 },
-  navActive: { background: 'none', border: 'none', color: '#3b82f6', fontSize: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, fontWeight: 'bold' },
-  btnP: { background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 'bold', cursor: 'pointer', padding: '10px 15px' },
-  btnS: { background: '#1e293b', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', padding: '10px 15px' },
-  iconBtn: { background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' },
-  input: { width: '100%', padding: 12, marginBottom: 10, background: '#020617', border: '1px solid #1e293b', borderRadius: 10, color: '#fff', boxSizing: 'border-box' },
-  form: { background: '#0f172a', padding: 20, borderRadius: 15, border: '1px solid #3b82f6', marginBottom: 20 },
-  searchBox: { background: '#0f172a', display: 'flex', alignItems: 'center', padding: '0 15px', borderRadius: 10, border: '1px solid #1e293b', marginBottom: 15 },
-  searchIn: { background: 'none', border: 'none', color: '#fff', padding: '12px 0', outline: 'none', width: '100%' },
-  toastWrap: { position: 'fixed', top: 20, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, zIndex: 1000 },
-  toast: { padding: '10px 20px', borderRadius: 20, color: '#fff', fontSize: 13, fontWeight: 'bold' },
-  overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-  cardPrint: { width: '250px', background: '#fff', color: '#000', borderRadius: 8, border: '1px solid #000', textAlign: 'center', overflow: 'hidden' },
-  bigInput: { background: 'none', border: 'none', borderBottom: '2px solid #3b82f6', color: '#fff', fontSize: 32, textAlign: 'center', width: '100%', outline: 'none', fontWeight: 'bold' },
-  paymentModal: { background: '#0f172a', padding: 25, borderRadius: 20, textAlign: 'center', border: '1px solid #3b82f6' },
-  scanBox: { position: 'relative', borderRadius: 20, overflow: 'hidden' },
-  closeBtn: { position: 'absolute', top: 10, right: 10, background: '#000', color: '#fff', border: 'none', padding: 10, borderRadius: '50%' },
-  skeleton: { height: 60, background: '#0f172a', borderRadius: 12, marginBottom: 10 },
-  loginPage: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  loginCard: { background: '#0f172a', padding: 40, borderRadius: 25, width: '100%', maxWidth: 350, textAlign: 'center', border: '1px solid #1e293b' },
-  fadeIn: { animation: 'fadeIn 0.4s ease' }
+/* ===================== THEME COLORS ===================== */
+const DARK_THEME = {
+  bg: '#020617',
+  card: '#0f172a',
+  cardAlt: '#1e293b',
+  text: '#f8fafc',
+  textSecondary: '#94a3b8',
+  border: '#1e293b',
+  primary: '#3b82f6',
+  primaryDark: '#1e40af'
 };
 
+const LIGHT_THEME = {
+  bg: '#f1f5f9',
+  card: '#ffffff',
+  cardAlt: '#e2e8f0',
+  text: '#0f172a',
+  textSecondary: '#64748b',
+  border: '#e2e8f0',
+  primary: '#2563eb',
+  primaryDark: '#1e40af'
+};
+
+/* ===================== STYLES ===================== */
+const styles = {
+  app: {
+    minHeight: '100vh',
+    transition: 'background 0.3s, color 0.3s'
+  },
+  header: {
+    padding: '15px 20px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    position: 'sticky',
+    top: 0,
+    zIndex: 10
+  },
+  brand: {
+    fontSize: 18,
+    fontWeight: 900,
+    margin: 0,
+    letterSpacing: '-0.5px'
+  },
+  subBrand: {
+    fontSize: 10,
+    margin: '2px 0 0',
+    fontWeight: '600',
+    letterSpacing: '1px'
+  },
+  main: {
+    padding: '20px',
+    paddingBottom: 100,
+    maxWidth: 1200,
+    margin: '0 auto'
+  },
+  nav: {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    display: 'flex',
+    justifyContent: 'space-around',
+    padding: '12px 0',
+    zIndex: 10
+  },
+  navBtn: {
+    background: 'none',
+    border: 'none',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 4,
+    cursor: 'pointer',
+    padding: '8px 12px',
+    transition: 'all 0.2s'
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+    gap: 12,
+    marginBottom: 20
+  },
+  statCard: {
+    padding: 20,
+    borderRadius: 16,
+    border: '1px solid',
+    textAlign: 'center',
+    transition: 'transform 0.2s'
+  },
+  heroCard: {
+    padding: 30,
+    borderRadius: 20,
+    color: '#fff',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.12)'
+  },
+  listItem: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    border: '1px solid',
+    marginBottom: 10,
+    transition: 'all 0.2s',
+    gap: 12
+  },
+  searchBox: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '0 15px',
+    borderRadius: 12,
+    border: '1px solid',
+    marginBottom: 15
+  },
+  searchInput: {
+    background: 'none',
+    border: 'none',
+    padding: '14px 10px',
+    outline: 'none',
+    width: '100%',
+    fontSize: 14
+  },
+  form: {
+    padding: 20,
+    borderRadius: 16,
+    border: '2px solid',
+    marginBottom: 20
+  },
+  input: {
+    width: '100%',
+    padding: 14,
+    marginBottom: 12,
+    border: '1px solid',
+    borderRadius: 10,
+    fontSize: 14,
+    boxSizing: 'border-box',
+    transition: 'border 0.2s'
+  },
+  btnPrimary: {
+    color: '#fff',
+    border: 'none',
+    borderRadius: 12,
+    fontWeight: '600',
+    cursor: 'pointer',
+    padding: '12px 20px',
+    fontSize: 14,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'center',
+    transition: 'all 0.2s',
+    width: '100%'
+  },
+  btnSecondary: {
+    color: '#fff',
+    border: 'none',
+    borderRadius: 12,
+    fontWeight: '600',
+    cursor: 'pointer',
+    padding: '12px 20px',
+    fontSize: 14,
+    transition: 'all 0.2s'
+  },
+  iconBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 8,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'opacity 0.2s'
+  },
+  paymentModal: {
+    padding: 30,
+    borderRadius: 20,
+    border: '2px solid',
+    textAlign: 'center',
+    maxWidth: 400,
+    margin: '0 auto'
+  },
+  bigInput: {
+    background: 'none',
+    border: 'none',
+    borderBottom: '3px solid',
+    fontSize: 36,
+    textAlign: 'center',
+    width: '100%',
+    outline: 'none',
+    fontWeight: 'bold',
+    padding: '10px 0'
+  },
+  scannerBox: {
+    position: 'relative',
+    borderRadius: 20,
+    overflow: 'hidden',
+    maxWidth: 500,
+    margin: '0 auto'
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    background: 'rgba(0,0,0,0.7)',
+    color: '#fff',
+    border: 'none',
+    padding: 12,
+    borderRadius: '50%',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.85)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+    padding: 20
+  },
+  printCard: {
+    width: 280,
+    background: '#fff',
+    color: '#000',
+    borderRadius: 12,
+    overflow: 'hidden',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
+  },
+  cardHeader: {
+    padding: 12,
+    borderBottom: '2px solid #000',
+    textAlign: 'center'
+  },
+  cardBody: {
+    display: 'flex',
+    padding: 15,
+    gap: 12,
+    alignItems: 'center'
+  },
+  cardInfo: {
+    fontSize: 9,
+    lineHeight: 1.6,
+    textAlign: 'left',
+    flex: 1
+  },
+  cardFooter: {
+    background: '#000',
+    color: '#fff',
+    fontSize: 10,
+    padding: 6,
+    textAlign: 'center',
+    fontWeight: 'bold',
+    letterSpacing: '1px'
+  },
+  toastContainer: {
+    position: 'fixed',
+    top: 20,
+    left: 0,
+    right: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 10,
+    zIndex: 1000,
+    pointerEvents: 'none'
+  },
+  toast: {
+    padding: '12px 24px',
+    borderRadius: 25,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    animation: 'slideIn 0.3s ease'
+  },
+  loginPage: {
+    minHeight: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20
+  },
+  loginCard: {
+    padding: 40,
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: 380,
+    textAlign: 'center',
+    border: '1px solid',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+  },
+  fadeIn: {
+    animation: 'fadeIn 0.4s ease'
+  }
+};
+
+// Add animations
 if (typeof document !== 'undefined') {
-  const s = document.createElement('style');
-  s.innerHTML = `
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-    @media print { body * { visibility: hidden; } #card, #card * { visibility: visible; } #card { position: fixed; left: 0; top: 0; } }
+  const styleSheet = document.createElement('style');
+  styleSheet.textContent = `
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @media print {
+      body * { visibility: hidden; }
+      #printable-card, #printable-card * { visibility: visible; }
+      #printable-card {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+      }
+    }
   `;
-  document.head.appendChild(s);
+  document.head.appendChild(styleSheet);
 }
