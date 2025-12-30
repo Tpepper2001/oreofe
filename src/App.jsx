@@ -694,7 +694,6 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
       setIsScanning(false);
     } catch (error) {
       showToast("Failed to scan card", "error");
-      console.error(error);
     }
   };
 
@@ -704,7 +703,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
       return;
     }
 
-    // FIXED: Included registration_number and employee_name required by the DB schema
+    // FIXED: Using actual profile name and member's ajo_owner_id
     const transactionData = {
       contributor_id: selectedMember.id,
       contributor_name: selectedMember.full_name,
@@ -712,14 +711,14 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
       employee_id: profile.id,
       employee_name: profile.full_name,
       amount: Math.floor(Number(amount)),
-      ajo_owner_id: 'admin'
+      ajo_owner_id: selectedMember.ajo_owner_id || 'admin'
     };
 
     const { error } = await supabase.from('transactions').insert([transactionData]);
 
     if (error) {
       showToast("Failed to record payment", "error");
-      console.error("DB Error:", error);
+      console.error("Payment Error Details:", error);
     } else {
       showToast("Payment recorded successfully", "success");
       setSelectedMember(null);
@@ -744,27 +743,17 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            style={{
-              ...styles.bigInput,
-              borderColor: colors.primary,
-              color: colors.text
-            }}
+            style={{ ...styles.bigInput, borderColor: colors.primary, color: colors.text }}
             placeholder="0"
             autoFocus
           />
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            onClick={handleSubmitPayment}
-            style={{ ...styles.btnPrimary, flex: 1, background: colors.primary, padding: 15 }}
-          >
+          <button onClick={handleSubmitPayment} style={{ ...styles.btnPrimary, flex: 1, background: colors.primary }}>
             Confirm Payment
           </button>
-          <button
-            onClick={() => setSelectedMember(null)}
-            style={{ ...styles.btnSecondary, flex: 1, background: colors.cardAlt, padding: 15 }}
-          >
+          <button onClick={() => setSelectedMember(null)} style={{ ...styles.btnSecondary, flex: 1, background: colors.cardAlt }}>
             Cancel
           </button>
         </div>
@@ -777,13 +766,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
       {!isScanning ? (
         <button
           onClick={() => setIsScanning(true)}
-          style={{
-            ...styles.btnPrimary,
-            background: colors.primary,
-            width: '100%',
-            padding: 50,
-            fontSize: 18
-          }}
+          style={{ ...styles.btnPrimary, background: colors.primary, padding: 50, fontSize: 18 }}
         >
           <Camera size={40} style={{ marginBottom: 10 }} />
           <div>Tap to Scan Member Card</div>
@@ -791,20 +774,10 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
       ) : (
         <div style={styles.scannerBox}>
           <Scanner
-            onScan={(results) => {
-              if (results && results[0]) {
-                handleScan(results[0].rawValue);
-              }
-            }}
+            onScan={(results) => { if (results?.[0]) handleScan(results[0].rawValue); }}
             constraints={{ facingMode: 'environment' }}
           />
-          <button
-            onClick={() => setIsScanning(false)}
-            style={styles.closeBtn}
-            aria-label="Close scanner"
-          >
-            <X size={24} />
-          </button>
+          <button onClick={() => setIsScanning(false)} style={styles.closeBtn}><X size={24} /></button>
         </div>
       )}
     </div>
@@ -823,9 +796,8 @@ const PrintCardModal = ({ member, config, onClose, colors }) => {
           <p style={{ margin: '2px 0 0', fontSize: 8 }}>{config.address}</p>
           <p style={{ margin: '2px 0 0', fontSize: 8 }}>Tel: {config.phones}</p>
         </div>
-        
         <div style={styles.cardBody}>
-          <img src={qrUrl} alt="Member QR Code" style={{ width: 100, height: 100 }} />
+          <img src={qrUrl} alt="QR" style={{ width: 100, height: 100 }} />
           <div style={styles.cardInfo}>
             <p><strong>NAME:</strong> {member.full_name}</p>
             <p><strong>REG:</strong> {member.registration_number}</p>
@@ -833,25 +805,11 @@ const PrintCardModal = ({ member, config, onClose, colors }) => {
             <p><strong>DAILY:</strong> ₦{member.expected_amount.toLocaleString()}</p>
           </div>
         </div>
-        
-        <div style={styles.cardFooter}>
-          MEMBERSHIP ID CARD
-        </div>
+        <div style={styles.cardFooter}>MEMBERSHIP ID CARD</div>
       </div>
-
       <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-        <button
-          onClick={() => window.print()}
-          style={{ ...styles.btnPrimary, background: colors.primary, padding: '12px 30px' }}
-        >
-          <Printer size={18} /> Print Card
-        </button>
-        <button
-          onClick={onClose}
-          style={{ ...styles.btnSecondary, background: colors.cardAlt, padding: '12px 30px' }}
-        >
-          Close
-        </button>
+        <button onClick={() => window.print()} style={{ ...styles.btnPrimary, background: colors.primary }}>Print</button>
+        <button onClick={onClose} style={{ ...styles.btnSecondary, background: colors.cardAlt }}>Close</button>
       </div>
     </div>
   );
@@ -865,10 +823,7 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    onLogin({
-      username: formData.get('username'),
-      password: formData.get('password')
-    });
+    onLogin({ username: formData.get('username'), password: formData.get('password') });
   };
 
   return (
@@ -876,106 +831,17 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
       <div style={{ ...styles.loginCard, background: colors.card, borderColor: colors.border }}>
         <Landmark size={48} color={colors.primary} style={{ marginBottom: 15 }} />
         <h1 style={{ margin: 0, color: colors.text }}>{CONFIG.business.name}</h1>
-        <p style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 25 }}>
-          Management Portal
-        </p>
-
-        <div style={{
-          display: 'flex',
-          gap: 10,
-          marginBottom: 25,
-          background: colors.bg,
-          padding: 4,
-          borderRadius: 12,
-          border: `1px solid ${colors.border}`
-        }}>
-          <button
-            type="button"
-            onClick={() => setLoginType('admin')}
-            style={{
-              flex: 1,
-              padding: '12px',
-              border: 'none',
-              borderRadius: 10,
-              background: loginType === 'admin' ? colors.primary : 'transparent',
-              color: loginType === 'admin' ? '#fff' : colors.textSecondary,
-              fontWeight: '600',
-              cursor: 'pointer',
-              fontSize: 14
-            }}
-          >
-            <LayoutDashboard size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-            Admin
-          </button>
-          <button
-            type="button"
-            onClick={() => setLoginType('agent')}
-            style={{
-              flex: 1,
-              padding: '12px',
-              border: 'none',
-              borderRadius: 10,
-              background: loginType === 'agent' ? colors.primary : 'transparent',
-              color: loginType === 'agent' ? '#fff' : colors.textSecondary,
-              fontWeight: '600',
-              cursor: 'pointer',
-              fontSize: 14
-            }}
-          >
-            <UserCheck size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-            Agent
-          </button>
+        <div style={{ display: 'flex', gap: 10, margin: '25px 0', background: colors.bg, padding: 4, borderRadius: 12 }}>
+          <button type="button" onClick={() => setLoginType('admin')} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: loginType === 'admin' ? colors.primary : 'transparent', color: loginType === 'admin' ? '#fff' : colors.textSecondary }}>Admin</button>
+          <button type="button" onClick={() => setLoginType('agent')} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: loginType === 'agent' ? colors.primary : 'transparent', color: loginType === 'agent' ? '#fff' : colors.textSecondary }}>Agent</button>
         </div>
-
         <form onSubmit={handleSubmit}>
-          <input
-            name="username"
-            type="text"
-            placeholder={loginType === 'admin' ? 'Admin Username' : 'Employee ID'}
-            style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }}
-            required
-          />
-          
+          <input name="username" placeholder={loginType === 'admin' ? 'Username' : 'ID'} style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }} required />
           <div style={{ position: 'relative' }}>
-            <input
-              name="password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Password"
-              style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text, paddingRight: 45 }}
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              style={{
-                position: 'absolute',
-                right: 12,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                color: colors.textSecondary,
-                cursor: 'pointer'
-              }}
-            >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
+            <input name="password" type={showPassword ? 'text' : 'password'} placeholder="Password" style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }} required />
+            <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: 12, top: 12, border: 'none', background: 'none' }}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              ...styles.btnPrimary,
-              background: loading ? colors.cardAlt : colors.primary,
-              width: '100%',
-              padding: 15,
-              fontSize: 15,
-              cursor: loading ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {loading ? 'Signing in...' : `Sign In as ${loginType === 'admin' ? 'Admin' : 'Agent'}`}
-          </button>
+          <button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: colors.primary }}>{loading ? '...' : 'Sign In'}</button>
         </form>
       </div>
     </div>
@@ -983,366 +849,63 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
 };
 
 const LoadingSpinner = () => (
-  <div style={{ textAlign: 'center', padding: 40 }}>
-    <RefreshCw size={32} style={{ animation: 'spin 1s linear infinite' }} />
-    <p style={{ marginTop: 10, color: '#64748b' }}>Loading...</p>
-  </div>
+  <div style={{ textAlign: 'center', padding: 40 }}><RefreshCw size={32} style={{ animation: 'spin 1s linear infinite' }} /></div>
 );
 
 const EmptyState = ({ message, colors }) => (
-  <div style={{ textAlign: 'center', padding: 40, color: colors.textSecondary }}>
-    <AlertCircle size={48} style={{ opacity: 0.3, marginBottom: 15 }} />
-    <p>{message}</p>
-  </div>
+  <div style={{ textAlign: 'center', padding: 40, color: colors.textSecondary }}><AlertCircle size={48} style={{ opacity: 0.3, marginBottom: 15 }} /><p>{message}</p></div>
 );
 
 const ToastContainer = ({ toasts }) => (
-  <div style={styles.toastContainer}>
-    {toasts.map(toast => (
-      <div
-        key={toast.id}
-        style={{
-          ...styles.toast,
-          background: toast.type === 'error' ? '#ef4444' : toast.type === 'success' ? '#10b981' : '#3b82f6'
-        }}
-      >
-        {toast.message}
-      </div>
-    ))}
-  </div>
+  <div style={styles.toastContainer}>{toasts.map(t => (<div key={t.id} style={{ ...styles.toast, background: t.type === 'error' ? '#ef4444' : '#10b981' }}>{t.message}</div>))}</div>
 );
 
-/* ===================== THEME COLORS ===================== */
-const DARK_THEME = {
-  bg: '#020617',
-  card: '#0f172a',
-  cardAlt: '#1e293b',
-  text: '#f8fafc',
-  textSecondary: '#94a3b8',
-  border: '#1e293b',
-  primary: '#3b82f6',
-  primaryDark: '#1e40af'
-};
+/* ===================== THEME & STYLES ===================== */
+const DARK_THEME = { bg: '#020617', card: '#0f172a', cardAlt: '#1e293b', text: '#f8fafc', textSecondary: '#94a3b8', border: '#1e293b', primary: '#3b82f6', primaryDark: '#1e40af' };
+const LIGHT_THEME = { bg: '#f1f5f9', card: '#ffffff', cardAlt: '#e2e8f0', text: '#0f172a', textSecondary: '#64748b', border: '#e2e8f0', primary: '#2563eb', primaryDark: '#1e40af' };
 
-const LIGHT_THEME = {
-  bg: '#f1f5f9',
-  card: '#ffffff',
-  cardAlt: '#e2e8f0',
-  text: '#0f172a',
-  textSecondary: '#64748b',
-  border: '#e2e8f0',
-  primary: '#2563eb',
-  primaryDark: '#1e40af'
-};
-
-/* ===================== STYLES ===================== */
 const styles = {
-  app: {
-    minHeight: '100vh',
-    transition: 'background 0.3s, color 0.3s'
-  },
-  header: {
-    padding: '15px 20px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    position: 'sticky',
-    top: 0,
-    zIndex: 10
-  },
-  brand: {
-    fontSize: 18,
-    fontWeight: 900,
-    margin: 0,
-    letterSpacing: '-0.5px'
-  },
-  subBrand: {
-    fontSize: 10,
-    margin: '2px 0 0',
-    fontWeight: '600',
-    letterSpacing: '1px'
-  },
-  main: {
-    padding: '20px',
-    paddingBottom: 100,
-    maxWidth: 1200,
-    margin: '0 auto'
-  },
-  nav: {
-    position: 'fixed',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    display: 'flex',
-    justifyContent: 'space-around',
-    padding: '12px 0',
-    zIndex: 10
-  },
-  navBtn: {
-    background: 'none',
-    border: 'none',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 4,
-    cursor: 'pointer',
-    padding: '8px 12px',
-    transition: 'all 0.2s'
-  },
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-    gap: 12,
-    marginBottom: 20
-  },
-  statCard: {
-    padding: 20,
-    borderRadius: 16,
-    border: '1px solid',
-    textAlign: 'center',
-    transition: 'transform 0.2s'
-  },
-  heroCard: {
-    padding: 30,
-    borderRadius: 20,
-    color: '#fff',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.12)'
-  },
-  listItem: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    border: '1px solid',
-    marginBottom: 10,
-    transition: 'all 0.2s',
-    gap: 12
-  },
-  searchBox: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '0 15px',
-    borderRadius: 12,
-    border: '1px solid',
-    marginBottom: 15
-  },
-  searchInput: {
-    background: 'none',
-    border: 'none',
-    padding: '14px 10px',
-    outline: 'none',
-    width: '100%',
-    fontSize: 14
-  },
-  form: {
-    padding: 20,
-    borderRadius: 16,
-    border: '2px solid',
-    marginBottom: 20
-  },
-  input: {
-    width: '100%',
-    padding: 14,
-    marginBottom: 12,
-    border: '1px solid',
-    borderRadius: 10,
-    fontSize: 14,
-    boxSizing: 'border-box',
-    transition: 'border 0.2s'
-  },
-  btnPrimary: {
-    color: '#fff',
-    border: 'none',
-    borderRadius: 12,
-    fontWeight: '600',
-    cursor: 'pointer',
-    padding: '12px 20px',
-    fontSize: 14,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    justifyContent: 'center',
-    transition: 'all 0.2s',
-    width: '100%'
-  },
-  btnSecondary: {
-    color: '#fff',
-    border: 'none',
-    borderRadius: 12,
-    fontWeight: '600',
-    cursor: 'pointer',
-    padding: '12px 20px',
-    fontSize: 14,
-    transition: 'all 0.2s'
-  },
-  iconBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 8,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'opacity 0.2s'
-  },
-  paymentModal: {
-    padding: 30,
-    borderRadius: 20,
-    border: '2px solid',
-    textAlign: 'center',
-    maxWidth: 400,
-    margin: '0 auto'
-  },
-  bigInput: {
-    background: 'none',
-    border: 'none',
-    borderBottom: '3px solid',
-    fontSize: 36,
-    textAlign: 'center',
-    width: '100%',
-    outline: 'none',
-    fontWeight: 'bold',
-    padding: '10px 0'
-  },
-  scannerBox: {
-    position: 'relative',
-    borderRadius: 20,
-    overflow: 'hidden',
-    maxWidth: 500,
-    margin: '0 auto'
-  },
-  closeBtn: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    background: 'rgba(0,0,0,0.7)',
-    color: '#fff',
-    border: 'none',
-    padding: 12,
-    borderRadius: '50%',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  overlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'rgba(0,0,0,0.85)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 100,
-    padding: 20
-  },
-  printCard: {
-    width: 280,
-    background: '#fff',
-    color: '#000',
-    borderRadius: 12,
-    overflow: 'hidden',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
-  },
-  cardHeader: {
-    padding: 12,
-    borderBottom: '2px solid #000',
-    textAlign: 'center'
-  },
-  cardBody: {
-    display: 'flex',
-    padding: 15,
-    gap: 12,
-    alignItems: 'center'
-  },
-  cardInfo: {
-    fontSize: 9,
-    lineHeight: 1.6,
-    textAlign: 'left',
-    flex: 1
-  },
-  cardFooter: {
-    background: '#000',
-    color: '#fff',
-    fontSize: 10,
-    padding: 6,
-    textAlign: 'center',
-    fontWeight: 'bold',
-    letterSpacing: '1px'
-  },
-  toastContainer: {
-    position: 'fixed',
-    top: 20,
-    left: 0,
-    right: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 10,
-    zIndex: 1000,
-    pointerEvents: 'none'
-  },
-  toast: {
-    padding: '12px 24px',
-    borderRadius: 25,
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    animation: 'slideIn 0.3s ease'
-  },
-  loginPage: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20
-  },
-  loginCard: {
-    padding: 40,
-    borderRadius: 24,
-    width: '100%',
-    maxWidth: 380,
-    textAlign: 'center',
-    border: '1px solid',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
-  },
-  fadeIn: {
-    animation: 'fadeIn 0.4s ease'
-  }
+  app: { minHeight: '100vh', transition: '0.3s' },
+  header: { padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 },
+  brand: { fontSize: 18, fontWeight: 900, margin: 0 },
+  subBrand: { fontSize: 10, margin: '2px 0 0' },
+  main: { padding: '20px', paddingBottom: 100, maxWidth: 1200, margin: '0 auto' },
+  nav: { position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'space-around', padding: '12px 0', zIndex: 10 },
+  navBtn: { background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 20 },
+  statCard: { padding: 20, borderRadius: 16, border: '1px solid', textAlign: 'center' },
+  heroCard: { padding: 30, borderRadius: 20, color: '#fff' },
+  listItem: { display: 'flex', alignItems: 'center', padding: 16, borderRadius: 12, border: '1px solid', marginBottom: 10, gap: 12 },
+  searchBox: { display: 'flex', alignItems: 'center', padding: '0 15px', borderRadius: 12, border: '1px solid', marginBottom: 15 },
+  searchInput: { background: 'none', border: 'none', padding: '14px 10px', width: '100%' },
+  form: { padding: 20, borderRadius: 16, border: '2px solid', marginBottom: 20 },
+  input: { width: '100%', padding: 14, marginBottom: 12, border: '1px solid', borderRadius: 10 },
+  btnPrimary: { color: '#fff', border: 'none', borderRadius: 12, fontWeight: '600', padding: '12px 20px', width: '100%', cursor: 'pointer' },
+  btnSecondary: { color: '#fff', border: 'none', borderRadius: 12, fontWeight: '600', padding: '12px 20px', cursor: 'pointer' },
+  iconBtn: { background: 'none', border: 'none', cursor: 'pointer' },
+  paymentModal: { padding: 30, borderRadius: 20, border: '2px solid', textAlign: 'center', maxWidth: 400, margin: '0 auto' },
+  bigInput: { background: 'none', border: 'none', borderBottom: '3px solid', fontSize: 36, textAlign: 'center', width: '100%', outline: 'none', fontWeight: 'bold' },
+  scannerBox: { position: 'relative', borderRadius: 20, overflow: 'hidden', maxWidth: 500, margin: '0 auto' },
+  closeBtn: { position: 'absolute', top: 15, right: 15, background: 'rgba(0,0,0,0.7)', color: '#fff', border: 'none', padding: 12, borderRadius: '50%' },
+  overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
+  printCard: { width: 280, background: '#fff', color: '#000', borderRadius: 12, overflow: 'hidden' },
+  cardHeader: { padding: 12, borderBottom: '2px solid #000', textAlign: 'center' },
+  cardBody: { display: 'flex', padding: 15, gap: 12, alignItems: 'center' },
+  cardInfo: { fontSize: 9, flex: 1 },
+  cardFooter: { background: '#000', color: '#fff', fontSize: 10, padding: 6, textAlign: 'center' },
+  toastContainer: { position: 'fixed', top: 20, left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, zIndex: 1000 },
+  toast: { padding: '12px 24px', borderRadius: 25, color: '#fff', fontSize: 14, fontWeight: '600' },
+  loginPage: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  loginCard: { padding: 40, borderRadius: 24, width: '100%', maxWidth: 380, textAlign: 'center', border: '1px solid' },
+  fadeIn: { animation: 'fadeIn 0.4s ease' }
 };
 
-// Add animations
 if (typeof document !== 'undefined') {
   const styleSheet = document.createElement('style');
   styleSheet.textContent = `
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(-20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-    @media print {
-      body * { visibility: hidden; }
-      #printable-card, #printable-card * { visibility: visible; }
-      #printable-card {
-        position: fixed;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        border: none;
-        box-shadow: none;
-      }
-    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @media print { body * { visibility: hidden; } #printable-card, #printable-card * { visibility: visible; } #printable-card { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); border: none; } }
   `;
   document.head.appendChild(styleSheet);
 }
