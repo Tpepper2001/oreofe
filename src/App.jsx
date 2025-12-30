@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import QRCode from 'react-qr-code'; // Ensure this is installed: npm install react-qr-code
 import {
   Users, UserPlus, LayoutDashboard, LogOut,
   CheckCircle, Landmark, X, Camera, RefreshCw, Trash2,
-  DollarSign, UserCheck, Search, Phone, MapPin, ReceiptText
+  DollarSign, ReceiptText, Search, Phone, MapPin, Printer
 } from 'lucide-react';
 
 /* ===================== CONFIG ===================== */
@@ -18,10 +19,6 @@ const BUSINESS_INFO = {
   phones: "08107218385, 08027203601"
 };
 
-/* ===================== UTILS ===================== */
-const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-const formatTime = (dateString) => new Date(dateString).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-
 /* ===================== MAIN APP ===================== */
 export default function App() {
   const [user, setUser] = useState(null);
@@ -29,76 +26,40 @@ export default function App() {
   const [view, setView] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [loginMode, setLoginMode] = useState('admin');
-
   const [members, setMembers] = useState([]);
-  const [agents, setAgents] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [stats, setStats] = useState({ totalRevenue: 0, todayRevenue: 0, activeMembers: 0 });
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [memRes, agentRes, transRes] = await Promise.all([
+      const [memRes, transRes] = await Promise.all([
         supabase.from('contributors').select('*').order('full_name'),
-        supabase.from('employees').select('*'),
         supabase.from('transactions').select('*').order('created_at', { ascending: false })
       ]);
-
       setMembers(memRes.data || []);
-      setAgents(agentRes.data || []);
       setTransactions(transRes.data || []);
-
       const today = new Date().toISOString().slice(0, 10);
       const totalRev = (transRes.data || []).reduce((sum, t) => sum + (t.amount || 0), 0);
-      const todayRev = (transRes.data || [])
-        .filter(t => t.created_at?.slice(0, 10) === today)
-        .reduce((sum, t) => sum + (t.amount || 0), 0);
-
-      setStats({
-        totalRevenue: totalRev,
-        todayRevenue: todayRev,
-        activeMembers: memRes.data?.length || 0
-      });
-    } catch (err) {
-      console.error("Data fetch error:", err);
-    } finally {
-      setLoading(false);
-    }
+      const todayRev = (transRes.data || []).filter(t => t.created_at?.slice(0, 10) === today).reduce((sum, t) => sum + (t.amount || 0), 0);
+      setStats({ totalRevenue: totalRev, todayRevenue: todayRev, activeMembers: memRes.data?.length || 0 });
+    } catch (err) { console.error(err); }
+    setLoading(false);
   };
 
-  useEffect(() => {
-    if (user) fetchData();
-  }, [user]);
+  useEffect(() => { if (user) fetchData(); }, [user]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    const username = e.target.username.value.trim().toLowerCase();
-    const password = e.target.password.value;
-
-    if (loginMode === 'admin') {
-      if (username === 'oreofe' && password === 'oreofe') {
-        setUser({ id: 'admin' });
-        setProfile({ id: 'admin', full_name: 'Admin Owner', role: 'admin' });
-      } else {
-        alert('Invalid Admin Access');
-      }
+    const u = e.target.username.value.trim().toLowerCase();
+    const p = e.target.password.value;
+    if (loginMode === 'admin' && u === 'oreofe' && p === 'oreofe') {
+      setUser({ id: 'admin' }); setProfile({ full_name: 'Admin', role: 'admin' });
     } else {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('employee_id_number', username)
-        .eq('password', password)
-        .single();
-
-      if (error || !data) {
-        alert('Invalid Agent Credentials');
-      } else {
-        setUser({ id: data.id });
-        setProfile({ ...data, role: 'employee' });
-      }
+      const { data } = await supabase.from('employees').select('*').eq('employee_id_number', u).eq('password', p).single();
+      if (data) { setUser({ id: data.id }); setProfile({ ...data, role: 'employee' }); }
+      else alert('Login Failed');
     }
-    setLoading(false);
   };
 
   if (!user) return <LoginScreen onLogin={handleLogin} loading={loading} loginMode={loginMode} setLoginMode={setLoginMode} />;
@@ -106,22 +67,16 @@ export default function App() {
   return (
     <div style={styles.appContainer}>
       <header style={styles.appHeader}>
-        <div style={styles.brand}>
-          <h1 style={styles.brandH1}>{BUSINESS_INFO.name}</h1>
-        </div>
-        <div style={styles.profilePill}>
-          <div style={styles.profileAvatar}>{profile?.full_name?.charAt(0)}</div>
-          <span>{profile?.full_name?.split(' ')[0]}</span>
-        </div>
+        <h1 style={styles.brandH1}>{BUSINESS_INFO.name}</h1>
+        <div style={styles.profilePill}><span>{profile?.full_name}</span></div>
       </header>
 
       <main style={styles.contentArea}>
         {profile?.role === 'admin' ? (
           <>
             {view === 'dashboard' && <OwnerDashboard stats={stats} transactions={transactions} onRefresh={fetchData} />}
-            {view === 'members' && <MemberManagement members={members} onRefresh={fetchData} transactions={transactions} />}
-            {view === 'employees' && <AgentManagement agents={agents} onRefresh={fetchData} />}
-            {view === 'transactions' && <TransactionHistory transactions={transactions} members={members} agents={agents} />}
+            {view === 'members' && <MemberManagement members={members} onRefresh={fetchData} />}
+            {view === 'transactions' && <TransactionHistory transactions={transactions} />}
           </>
         ) : (
           <CollectionInterface profile={profile} onRefresh={fetchData} />
@@ -129,314 +84,218 @@ export default function App() {
       </main>
 
       <nav style={styles.bottomNav}>
-        <button onClick={() => setView('dashboard')} style={{...styles.navButton, ...(view === 'dashboard' ? styles.navButtonActive : {})}}>
-          <LayoutDashboard size={22} /><span>Home</span>
-        </button>
+        <button onClick={() => setView('dashboard')} style={view === 'dashboard' ? styles.navActive : styles.navBtn}><LayoutDashboard /><span>Home</span></button>
         {profile?.role === 'admin' && (
-          <>
-            <button onClick={() => setView('members')} style={{...styles.navButton, ...(view === 'members' ? styles.navButtonActive : {})}}>
-              <Users size={22} /><span>Members</span>
-            </button>
-            <button onClick={() => setView('transactions')} style={{...styles.navButton, ...(view === 'transactions' ? styles.navButtonActive : {})}}>
-              <ReceiptText size={22} /><span>History</span>
-            </button>
-          </>
+          <button onClick={() => setView('members')} style={view === 'members' ? styles.navActive : styles.navBtn}><Users /><span>Members</span></button>
         )}
-        <button onClick={() => { setUser(null); setProfile(null); }} style={styles.navButton}>
-          <LogOut size={22} /><span>Exit</span>
-        </button>
+        <button onClick={() => { setUser(null); setProfile(null); }} style={styles.navBtn}><LogOut /><span>Exit</span></button>
       </nav>
     </div>
   );
 }
 
-/* ==================== COLLECTION INTERFACE (AGENT) ==================== */
-const CollectionInterface = ({ profile, onRefresh }) => {
-  const [result, setResult] = useState(null);
-  const [scanning, setScanning] = useState(false);
-
-  const handleScan = async (data) => {
-    if (!data) return;
-    try {
-      const parsed = JSON.parse(data);
-      const { data: member, error: memErr } = await supabase.from('contributors').select('*').eq('id', parsed.id).single();
-      
-      if (memErr || !member) throw new Error('Member not found');
-
-      const { error: insErr } = await supabase.from('transactions').insert([{
-        contributor_id: member.id,
-        contributor_name: member.full_name,
-        employee_id: profile.id,
-        amount: member.expected_amount,
-        ajo_owner_id: 'admin'
-      }]);
-
-      if (insErr) throw insErr;
-
-      setResult({ name: member.full_name, amount: member.expected_amount });
-      setScanning(false);
-      onRefresh();
-    } catch (e) {
-      alert('Invalid Card QR Code');
-    }
-  };
-
-  if (result) {
-    return (
-      <div style={styles.successCard}>
-        <CheckCircle size={80} color="#10b981" />
-        <h1 style={{fontSize: 48, margin: '15px 0'}}>₦{result.amount.toLocaleString()}</h1>
-        <p style={{fontSize: 18, fontWeight: 600}}>{result.name}</p>
-        <p style={{color: '#94a3b8', marginTop: 10}}>Collection Successful</p>
-        <button onClick={() => setResult(null)} style={{...styles.btnPrimary, marginTop: 40, width: '100%'}}>CONTINUE</button>
-      </div>
-    );
-  }
+/* ==================== QR CARD COMPONENT ==================== */
+const MemberCard = ({ member, onClose }) => {
+  const printCard = () => { window.print(); };
 
   return (
-    <div style={styles.cardContainer}>
-      {!scanning ? (
-        <div style={{textAlign: 'center', padding: '40px 0'}}>
-          <Landmark size={80} color="#3b82f6" style={{marginBottom: 20}} />
-          <h2 style={{fontSize: 24, fontWeight: 800}}>Member Collection</h2>
-          <p style={{color: '#94a3b8', margin: '15px 0 30px'}}>Scan the QR code on the member's card to record payment.</p>
-          <button onClick={() => setScanning(true)} style={{...styles.btnPrimary, width: '100%', padding: 20}}>
-            <Camera size={24} /> OPEN CAMERA
-          </button>
+    <div style={styles.modalOverlay}>
+      <div style={styles.cardPrintout} id="printableCard">
+        <div style={styles.cardHeader}>
+          <h2 style={{margin: 0, fontSize: 18}}>{BUSINESS_INFO.name}</h2>
+          <p style={{fontSize: 8, margin: '2px 0'}}>{BUSINESS_INFO.address}</p>
         </div>
-      ) : (
-        <div style={styles.scannerBox}>
-          <Scanner 
-            onScan={(detected) => detected.length > 0 && handleScan(detected[0].rawValue)}
-            styles={{ container: { width: '100%', aspectRatio: '1/1' } }}
-          />
-          <button onClick={() => setScanning(false)} style={styles.closeBtn}><X size={24} /></button>
+        <div style={styles.cardBody}>
+          <div style={styles.qrWrapper}>
+            <QRCode value={JSON.stringify({ id: member.id })} size={100} />
+          </div>
+          <div style={styles.cardInfo}>
+            <p><strong>NAME:</strong> {member.full_name}</p>
+            <p><strong>REG NO:</strong> {member.registration_number}</p>
+            <p><strong>PHONE:</strong> {member.phone_number}</p>
+            <p><strong>ADDR:</strong> {member.address}</p>
+          </div>
         </div>
-      )}
+        <div style={styles.cardFooter}>MEMBERSHIP CARD</div>
+      </div>
+      <div style={{display: 'flex', gap: 10, marginTop: 20}}>
+        <button onClick={printCard} style={styles.btnPrimary}><Printer size={18}/> PRINT CARD</button>
+        <button onClick={onClose} style={styles.btnSecondary}>CLOSE</button>
+      </div>
     </div>
   );
 };
 
-/* ==================== OWNER DASHBOARD ==================== */
-const OwnerDashboard = ({ stats, transactions, onRefresh }) => (
-  <div style={styles.fadeIn}>
-    <div style={{marginBottom: 25}}>
-      <p style={{color: '#94a3b8', fontSize: 14}}>Business Overview</p>
-      <h2 style={{fontSize: 28, fontWeight: 900}}>{BUSINESS_INFO.name}</h2>
-    </div>
-
-    <div style={styles.statsGrid}>
-      <div style={{...styles.statCard, background: 'linear-gradient(135deg, #3b82f6, #2563eb)'}}>
-        <p style={{fontSize: 12, opacity: 0.9}}>TODAY'S TOTAL</p>
-        <h2 style={{fontSize: 24, fontWeight: 900}}>₦{stats.todayRevenue.toLocaleString()}</h2>
-      </div>
-      <div style={styles.statCard}>
-        <p style={{fontSize: 12, color: '#94a3b8'}}>MEMBERS</p>
-        <h2 style={{fontSize: 24, fontWeight: 900}}>{stats.activeMembers}</h2>
-      </div>
-    </div>
-
-    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '30px 0 15px'}}>
-      <h3 style={{fontWeight: 800}}>Recent Collections</h3>
-      <button onClick={onRefresh} style={styles.btnIcon}><RefreshCw size={18} /></button>
-    </div>
-
-    <div style={styles.list}>
-      {transactions.slice(0, 8).map(t => (
-        <div key={t.id} style={styles.listItem}>
-          <div style={styles.listIcon}><DollarSign size={18} color="#34d399"/></div>
-          <div style={{flex: 1}}>
-            <p style={{fontWeight: 700, fontSize: 15}}>{t.contributor_name}</p>
-            <p style={{fontSize: 12, color: '#64748b'}}>{formatTime(t.created_at)}</p>
-          </div>
-          <p style={{fontWeight: 900, color: '#fff'}}>₦{t.amount}</p>
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
 /* ==================== MEMBER MANAGEMENT ==================== */
-const MemberManagement = ({ members, onRefresh, transactions }) => {
+const MemberManagement = ({ members, onRefresh }) => {
   const [adding, setAdding] = useState(false);
-  const [search, setSearch] = useState('');
-
-  const calculateBalance = (memberId) => {
-    return transactions
-      .filter(t => t.contributor_id === memberId)
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-  };
-
-  const filteredMembers = members.filter(m => 
-    m.full_name.toLowerCase().includes(search.toLowerCase()) || 
-    m.registration_number?.toLowerCase().includes(search.toLowerCase())
-  );
+  const [selectedMember, setSelectedMember] = useState(null);
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    const formData = new FormData(e.target);
+    const f = new FormData(e.target);
     const { error } = await supabase.from('contributors').insert([{
-      full_name: formData.get('name'),
-      registration_number: formData.get('regNo'),
-      phone_number: formData.get('phone'),
-      address: formData.get('address'),
-      expected_amount: Number(formData.get('amount')),
+      full_name: f.get('name'),
+      registration_number: f.get('reg'),
+      phone_number: f.get('phone'),
+      address: f.get('addr'),
+      expected_amount: Number(f.get('amt')),
       ajo_owner_id: 'admin'
     }]);
-
-    if (!error) { setAdding(false); onRefresh(); }
-    else alert('Error adding member');
+    if (!error) { setAdding(false); onRefresh(); } else alert("Database Error: Check columns");
   };
 
   return (
-    <div style={styles.fadeIn}>
+    <div>
       <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: 20}}>
-        <h2 style={{fontWeight: 900}}>Members</h2>
-        <button onClick={() => setAdding(true)} style={styles.btnPrimary}><UserPlus size={18} /> New</button>
-      </div>
-
-      <div style={styles.searchBar}>
-        <Search size={18} color="#64748b" />
-        <input 
-          placeholder="Search Name or Reg No..." 
-          value={search} 
-          onChange={(e) => setSearch(e.target.value)}
-          style={styles.searchInput}
-        />
+        <h2>Members</h2>
+        <button onClick={() => setAdding(true)} style={styles.btnPrimary}><UserPlus size={18}/> Add</button>
       </div>
 
       {adding && (
         <form onSubmit={handleAdd} style={styles.cardForm}>
-          <h3 style={{marginBottom: 15}}>Register New Member</h3>
-          <input name="name" placeholder="Full Name (as on card)" style={styles.input} required />
-          <input name="regNo" placeholder="Registration No" style={styles.input} required />
+          <input name="name" placeholder="Full Name" style={styles.input} required />
+          <input name="reg" placeholder="Registration No" style={styles.input} required />
           <input name="phone" placeholder="Phone Number" style={styles.input} required />
-          <input name="address" placeholder="Residential Address" style={styles.input} required />
-          <input name="amount" type="number" placeholder="Contribution Amount (₦)" style={styles.input} required />
-          <div style={{display: 'flex', gap: 10}}>
-            <button type="submit" style={{...styles.btnPrimary, flex: 1}}>Save Member</button>
-            <button type="button" onClick={() => setAdding(false)} style={styles.btnSecondary}>Cancel</button>
-          </div>
+          <input name="addr" placeholder="Address" style={styles.input} required />
+          <input name="amt" type="number" placeholder="Daily Amount" style={styles.input} required />
+          <button type="submit" style={styles.btnPrimary}>Save Member</button>
         </form>
       )}
 
-      <div style={styles.list}>
-        {filteredMembers.map(m => (
-          <div key={m.id} style={{...styles.listItem, flexDirection: 'column', alignItems: 'flex-start', gap: 10}}>
-            <div style={{display: 'flex', justifyContent: 'space-between', width: '100%'}}>
-              <div>
-                <p style={{fontWeight: 800, fontSize: 16}}>{m.full_name}</p>
-                <p style={{fontSize: 12, color: '#3b82f6', fontWeight: 700}}>REG: {m.registration_number}</p>
-              </div>
-              <div style={{textAlign: 'right'}}>
-                <p style={{fontSize: 10, color: '#94a3b8'}}>SAVINGS</p>
-                <p style={{fontWeight: 900, color: '#34d399'}}>₦{calculateBalance(m.id).toLocaleString()}</p>
-              </div>
-            </div>
-            <div style={{display: 'flex', gap: 15, fontSize: 12, color: '#94a3b8'}}>
-               <span style={{display: 'flex', alignItems: 'center', gap: 4}}><Phone size={12}/> {m.phone_number}</span>
-               <span style={{display: 'flex', alignItems: 'center', gap: 4}}><MapPin size={12}/> {m.address?.slice(0, 20)}...</span>
-            </div>
-            <button 
-                onClick={async () => { if(confirm('Delete member?')) { await supabase.from('contributors').delete().eq('id', m.id); onRefresh(); }}} 
-                style={{...styles.btnDanger, alignSelf: 'flex-end', padding: '4px 8px'}}
-            >
-                <Trash2 size={14}/>
-            </button>
+      {members.map(m => (
+        <div key={m.id} style={styles.listItem}>
+          <div style={{flex: 1}}>
+            <p style={{fontWeight: 700}}>{m.full_name}</p>
+            <p style={{fontSize: 12, color: '#3b82f6'}}>{m.registration_number}</p>
           </div>
-        ))}
-      </div>
+          <button onClick={() => setSelectedMember(m)} style={styles.btnIcon}><Printer size={20} color="#3b82f6"/></button>
+        </div>
+      ))}
+
+      {selectedMember && <MemberCard member={selectedMember} onClose={() => setSelectedMember(null)} />}
     </div>
   );
 };
 
-/* ==================== TRANSACTION HISTORY ==================== */
-const TransactionHistory = ({ transactions }) => (
-  <div style={styles.fadeIn}>
-    <h2 style={{fontWeight: 900, marginBottom: 20}}>Collection Logs</h2>
-    <div style={styles.list}>
-      {transactions.map(t => (
-        <div key={t.id} style={styles.listItem}>
-          <div style={{flex: 1}}>
-            <p style={{fontWeight: 700}}>{t.contributor_name}</p>
-            <p style={{fontSize: 11, color: '#94a3b8'}}>{formatDate(t.created_at)} at {formatTime(t.created_at)}</p>
-          </div>
-          <p style={{fontWeight: 900, fontSize: 18}}>₦{t.amount}</p>
-        </div>
-      ))}
+/* ==================== AGENT INTERFACE ==================== */
+const CollectionInterface = ({ profile, onRefresh }) => {
+  const [scanning, setScanning] = useState(false);
+  const [scanned, setScanned] = useState(null);
+
+  const onScan = async (data) => {
+    try {
+      const parsed = JSON.parse(data);
+      const { data: mem } = await supabase.from('contributors').select('*').eq('id', parsed.id).single();
+      await supabase.from('transactions').insert([{
+        contributor_id: mem.id, contributor_name: mem.full_name,
+        employee_id: profile.id, amount: mem.expected_amount, ajo_owner_id: 'admin'
+      }]);
+      setScanned(mem); setScanning(false); onRefresh();
+    } catch (e) { alert("Invalid Card"); }
+  };
+
+  if (scanned) return (
+    <div style={styles.successCard}>
+      <CheckCircle size={60} color="#10b981" />
+      <h2>₦{scanned.expected_amount}</h2>
+      <p>Collected from {scanned.full_name}</p>
+      <button onClick={() => setScanned(null)} style={styles.btnPrimary}>Next Member</button>
     </div>
-  </div>
+  );
+
+  return (
+    <div style={{textAlign: 'center'}}>
+      {!scanning ? (
+        <button onClick={() => setScanning(true)} style={{...styles.btnPrimary, width: '100%', padding: 30}}>
+          <Camera size={30} /> START SCANNING
+        </button>
+      ) : (
+        <div style={styles.scannerBox}>
+          <Scanner onScan={(d) => d[0] && onScan(d[0].rawValue)} />
+          <button onClick={() => setScanning(false)} style={styles.closeBtn}><X/></button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ==================== LOGIN & OTHER COMPONENTS ==================== */
+const OwnerDashboard = ({ stats, transactions, onRefresh }) => (
+    <div>
+        <div style={styles.statsGrid}>
+            <div style={styles.statCard}><h3>₦{stats.todayRevenue}</h3><p>Today</p></div>
+            <div style={styles.statCard}><h3>{stats.activeMembers}</h3><p>Members</p></div>
+        </div>
+        <h3 style={{margin: '20px 0'}}>Recent Activity</h3>
+        {transactions.slice(0, 5).map(t => (
+            <div key={t.id} style={styles.listItem}>
+                <span>{t.contributor_name}</span>
+                <strong>₦{t.amount}</strong>
+            </div>
+        ))}
+    </div>
 );
 
-/* ==================== LOGIN SCREEN ==================== */
+const TransactionHistory = ({ transactions }) => (
+    <div>{transactions.map(t => (
+        <div key={t.id} style={styles.listItem}>
+            <div><p>{t.contributor_name}</p><small>{new Date(t.created_at).toLocaleString()}</small></div>
+            <strong>₦{t.amount}</strong>
+        </div>
+    ))}</div>
+);
+
 const LoginScreen = ({ onLogin, loading, loginMode, setLoginMode }) => (
   <div style={styles.loginPage}>
     <div style={styles.loginCard}>
-      <div style={styles.loginLogo}>
-        <Landmark size={40} color="#fff" />
-      </div>
-      <h1 style={{fontSize: 22, fontWeight: 900, marginBottom: 5}}>{BUSINESS_INFO.name}</h1>
-      <p style={{fontSize: 12, color: '#94a3b8', marginBottom: 30}}>Ajo Management Portal</p>
-      
+      <Landmark size={40} color="#3b82f6" style={{marginBottom: 10}}/>
+      <h2 style={{marginBottom: 20}}>{BUSINESS_INFO.name}</h2>
       <div style={styles.toggleRow}>
-        <button onClick={() => setLoginMode('admin')} style={{...styles.toggleBtn, ...(loginMode === 'admin' ? styles.toggleActive : {})}}>OWNER</button>
-        <button onClick={() => setLoginMode('agent')} style={{...styles.toggleBtn, ...(loginMode === 'agent' ? styles.toggleActive : {})}}>AGENT</button>
+        <button onClick={() => setLoginMode('admin')} style={loginMode === 'admin' ? styles.toggleActive : styles.toggleBtn}>ADMIN</button>
+        <button onClick={() => setLoginMode('agent')} style={loginMode === 'agent' ? styles.toggleActive : styles.toggleBtn}>AGENT</button>
       </div>
-
       <form onSubmit={onLogin}>
-        <input name="username" placeholder="Username / ID" style={styles.input} required />
+        <input name="username" placeholder="ID" style={styles.input} required />
         <input name="password" type="password" placeholder="Password" style={styles.input} required />
-        <button type="submit" disabled={loading} style={{...styles.btnPrimary, width: '100%', padding: 16, marginTop: 10}}>
-          {loading ? 'AUTHENTICATING...' : 'LOGIN'}
-        </button>
+        <button type="submit" style={{...styles.btnPrimary, width: '100%'}}>LOGIN</button>
       </form>
-
-      <div style={{marginTop: 30, fontSize: 10, color: '#64748b', lineHeight: 1.5}}>
-        <p>{BUSINESS_INFO.address}</p>
-        <p>{BUSINESS_INFO.phones}</p>
-      </div>
     </div>
   </div>
 );
 
 /* ==================== STYLES ==================== */
 const styles = {
-  appContainer: { minHeight: '100vh', background: '#020617', color: '#fff', fontFamily: 'system-ui, sans-serif' },
-  appHeader: { height: 70, padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0f172a', borderBottom: '1px solid #1e293b', position: 'sticky', top: 0, zIndex: 10 },
-  brandH1: { fontSize: 18, fontWeight: 900, color: '#3b82f6' },
-  profilePill: { display: 'flex', alignItems: 'center', gap: 8, background: '#1e293b', padding: '6px 12px', borderRadius: 25, fontSize: 13 },
-  profileAvatar: { width: 24, height: 24, background: '#3b82f6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 11 },
+  appContainer: { minHeight: '100vh', background: '#020617', color: '#fff', fontFamily: 'sans-serif' },
+  appHeader: { padding: '15px 20px', background: '#0f172a', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between' },
+  brandH1: { fontSize: 16, color: '#3b82f6', margin: 0 },
+  profilePill: { background: '#1e293b', padding: '4px 12px', borderRadius: 20, fontSize: 12 },
   contentArea: { padding: 20, paddingBottom: 100 },
-  bottomNav: { position: 'fixed', bottom: 0, left: 0, right: 0, height: 75, background: '#0f172a', display: 'flex', justifyContent: 'space-around', alignItems: 'center', borderTop: '1px solid #1e293b', paddingBottom: 10 },
-  navButton: { background: 'none', border: 'none', color: '#64748b', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600 },
-  navButtonActive: { color: '#3b82f6' },
-  btnPrimary: { background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer' },
-  btnSecondary: { background: '#1e293b', color: '#fff', border: 'none', padding: '12px 20px', borderRadius: 12, fontWeight: 700 },
-  btnDanger: { background: '#450a0a', border: 'none', color: '#f87171', borderRadius: 8 },
-  btnIcon: { background: 'none', border: 'none', color: '#64748b' },
-  statsGrid: { display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 15 },
-  statCard: { background: '#0f172a', padding: 22, borderRadius: 24, border: '1px solid #1e293b' },
-  cardForm: { background: '#0f172a', padding: 25, borderRadius: 24, border: '1px solid #3b82f6', marginBottom: 25 },
-  input: { width: '100%', padding: 14, background: '#020617', border: '1px solid #1e293b', borderRadius: 12, color: '#fff', marginBottom: 12, fontSize: 15 },
-  searchBar: { display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', padding: '12px 15px', borderRadius: 12, marginBottom: 20, border: '1px solid #1e293b' },
-  searchInput: { background: 'none', border: 'none', color: '#fff', width: '100%', outline: 'none' },
-  list: { display: 'flex', flexDirection: 'column', gap: 12 },
-  listItem: { background: '#0f172a', padding: 18, borderRadius: 20, border: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 15 },
-  listIcon: { width: 40, height: 40, borderRadius: 12, background: '#064e3b', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  successCard: { textAlign: 'center', padding: 40, background: '#0f172a', borderRadius: 30, border: '1px solid #1e293b' },
-  scannerBox: { position: 'relative', borderRadius: 25, overflow: 'hidden', border: '4px solid #3b82f6' },
-  closeBtn: { position: 'absolute', top: 15, right: 15, background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', padding: 10, borderRadius: '50%' },
+  bottomNav: { position: 'fixed', bottom: 0, width: '100%', background: '#0f172a', display: 'flex', justifyContent: 'space-around', padding: '10px 0' },
+  navBtn: { background: 'none', border: 'none', color: '#64748b', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: 10 },
+  navActive: { background: 'none', border: 'none', color: '#3b82f6', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: 10 },
+  btnPrimary: { background: '#3b82f6', color: '#fff', border: 'none', padding: '12px', borderRadius: 8, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' },
+  btnSecondary: { background: '#334155', color: '#fff', border: 'none', padding: '12px', borderRadius: 8 },
+  btnIcon: { background: 'none', border: 'none', cursor: 'pointer' },
+  input: { width: '100%', padding: '12px', marginBottom: '10px', background: '#0f172a', border: '1px solid #1e293b', color: '#fff', borderRadius: 8, boxSizing: 'border-box' },
+  listItem: { background: '#0f172a', padding: '15px', borderRadius: 12, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #1e293b' },
+  statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
+  statCard: { background: '#0f172a', padding: '20px', borderRadius: 15, textAlign: 'center', border: '1px solid #1e293b' },
+  cardForm: { background: '#0f172a', padding: '20px', borderRadius: 15, marginBottom: 20, border: '1px solid #3b82f6' },
   loginPage: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  loginCard: { width: '100%', maxWidth: 380, padding: 40, background: '#0f172a', borderRadius: 32, textAlign: 'center', border: '1px solid #1e293b' },
-  loginLogo: { width: 70, height: 70, background: '#3b82f6', borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' },
-  toggleRow: { display: 'flex', background: '#020617', padding: 5, borderRadius: 15, marginBottom: 25 },
-  toggleBtn: { flex: 1, padding: 12, background: 'none', border: 'none', color: '#64748b', borderRadius: 12, fontWeight: 700, fontSize: 13 },
-  toggleActive: { background: '#3b82f6', color: '#fff' },
-  fadeIn: { animation: 'fadeIn 0.4s ease' }
+  loginCard: { background: '#0f172a', padding: '30px', borderRadius: 20, width: '100%', maxWidth: 350, textAlign: 'center' },
+  toggleRow: { display: 'flex', background: '#020617', padding: '5px', borderRadius: 10, marginBottom: 20 },
+  toggleBtn: { flex: 1, background: 'none', border: 'none', color: '#64748b', padding: '8px' },
+  toggleActive: { flex: 1, background: '#3b82f6', color: '#fff', padding: '8px', borderRadius: 8 },
+  scannerBox: { position: 'relative', borderRadius: 20, overflow: 'hidden' },
+  closeBtn: { position: 'absolute', top: 10, right: 10, background: '#000', color: '#fff', border: 'none', borderRadius: '50%', padding: '5px' },
+  successCard: { textAlign: 'center', padding: '40px', background: '#0f172a', borderRadius: 20 },
+  // PRINT STYLES
+  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
+  cardPrintout: { width: '280px', background: '#fff', color: '#000', padding: '15px', borderRadius: '10px', textAlign: 'center', border: '2px solid #000' },
+  cardHeader: { borderBottom: '2px solid #000', paddingBottom: '5px', marginBottom: '10px' },
+  cardBody: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' },
+  cardInfo: { textAlign: 'left', width: '100%', fontSize: '10px', lineHeight: '1.4' },
+  qrWrapper: { padding: '5px', background: '#fff' },
+  cardFooter: { marginTop: '10px', fontSize: '12px', fontWeight: 'bold', borderTop: '1px solid #000', paddingTop: '5px' }
 };
-
-if (typeof document !== 'undefined') {
-  const style = document.createElement('style');
-  style.innerHTML = `@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`;
-  document.head.appendChild(style);
-}
