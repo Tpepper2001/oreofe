@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import QrReader from 'react-qr-reader';
+import { Scanner } from '@yudiel/react-qr-scanner';
 import {
   Users, UserPlus, MapPin, LayoutDashboard, Settings, LogOut,
   CheckCircle, Loader2, Landmark, X, Camera, RefreshCw, Trash2,
@@ -337,7 +337,16 @@ const CollectionInterface = ({ profile, userLocation, onRefresh }) => {
     </div>
   );
 };
-
+<Scanner
+  onScan={(detectedCodes) => {
+    if (detectedCodes.length > 0) {
+      handleScan(detectedCodes[0].rawValue); // Use rawValue as the QR data string
+    }
+  }}
+  onError={handleError}
+  styles={{ container: { width: '100%' } }}
+  constraints={{ facingMode: 'environment' }}
+/>
 /* ==================== OWNER DASHBOARD ==================== */
 const OwnerDashboard = ({ stats, transactions, loading, onRefresh }) => (
   <div style={styles.fadeIn}>
