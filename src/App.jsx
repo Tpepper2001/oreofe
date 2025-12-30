@@ -77,14 +77,12 @@ export default function App() {
     const normalizedUsername = username.trim().toLowerCase();
 
     try {
-      // Check admin credentials
       if (normalizedUsername === CONFIG.admin.username && password === CONFIG.admin.password) {
         setAuth({ id: 'admin', role: 'admin', name: 'Oreofe Admin' });
         showToast("Admin access granted", "success");
         return;
       }
 
-      // Check agent credentials
       const { data: agent, error } = await supabase
         .from('employees')
         .select('*')
@@ -671,6 +669,7 @@ const AgentManagement = ({ agents, transactions, onRefresh, showToast, colors })
   );
 };
 
+/* ===================== SCANNER VIEW (FIXED) ===================== */
 const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
@@ -705,11 +704,14 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
       return;
     }
 
+    // FIXED: Included registration_number and employee_name required by the DB schema
     const transactionData = {
       contributor_id: selectedMember.id,
       contributor_name: selectedMember.full_name,
+      registration_number: selectedMember.registration_number,
       employee_id: profile.id,
-      amount: Number(amount),
+      employee_name: profile.full_name,
+      amount: Math.floor(Number(amount)),
       ajo_owner_id: 'admin'
     };
 
@@ -717,7 +719,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
 
     if (error) {
       showToast("Failed to record payment", "error");
-      console.error(error);
+      console.error("DB Error:", error);
     } else {
       showToast("Payment recorded successfully", "success");
       setSelectedMember(null);
@@ -857,7 +859,7 @@ const PrintCardModal = ({ member, config, onClose, colors }) => {
 
 const LoginScreen = ({ onLogin, loading, theme }) => {
   const [showPassword, setShowPassword] = useState(false);
-  const [loginType, setLoginType] = useState('admin'); // 'admin' or 'agent'
+  const [loginType, setLoginType] = useState('admin');
   const colors = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
 
   const handleSubmit = (e) => {
@@ -878,7 +880,6 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
           Management Portal
         </p>
 
-        {/* Login Type Selector */}
         <div style={{
           display: 'flex',
           gap: 10,
@@ -900,7 +901,6 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
               color: loginType === 'admin' ? '#fff' : colors.textSecondary,
               fontWeight: '600',
               cursor: 'pointer',
-              transition: 'all 0.2s',
               fontSize: 14
             }}
           >
@@ -919,7 +919,6 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
               color: loginType === 'agent' ? '#fff' : colors.textSecondary,
               fontWeight: '600',
               cursor: 'pointer',
-              transition: 'all 0.2s',
               fontSize: 14
             }}
           >
@@ -935,7 +934,6 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
             placeholder={loginType === 'admin' ? 'Admin Username' : 'Employee ID'}
             style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text }}
             required
-            autoComplete="username"
           />
           
           <div style={{ position: 'relative' }}>
@@ -945,7 +943,6 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
               placeholder="Password"
               style={{ ...styles.input, background: colors.bg, borderColor: colors.border, color: colors.text, paddingRight: 45 }}
               required
-              autoComplete="current-password"
             />
             <button
               type="button"
@@ -960,7 +957,6 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
                 color: colors.textSecondary,
                 cursor: 'pointer'
               }}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -981,34 +977,6 @@ const LoginScreen = ({ onLogin, loading, theme }) => {
             {loading ? 'Signing in...' : `Sign In as ${loginType === 'admin' ? 'Admin' : 'Agent'}`}
           </button>
         </form>
-
-        {/* Login Hint */}
-        <div style={{
-          marginTop: 20,
-          padding: 12,
-          background: colors.bg,
-          borderRadius: 10,
-          fontSize: 12,
-          color: colors.textSecondary,
-          textAlign: 'left'
-        }}>
-          <p style={{ margin: '0 0 8px', fontWeight: '600', color: colors.text }}>
-            {loginType === 'admin' ? '👑 Admin Access' : '👤 Agent Access'}
-          </p>
-          {loginType === 'admin' ? (
-            <p style={{ margin: 0 }}>
-              • Full system access<br/>
-              • Manage members & agents<br/>
-              • View all transactions
-            </p>
-          ) : (
-            <p style={{ margin: 0 }}>
-              • Scan member cards<br/>
-              • Record collections<br/>
-              • Track your commission
-            </p>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -1371,6 +1339,8 @@ if (typeof document !== 'undefined') {
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
+        border: none;
+        box-shadow: none;
       }
     }
   `;
