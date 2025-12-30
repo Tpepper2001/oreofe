@@ -4,7 +4,7 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import {
   Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
   RefreshCw, Printer, AlertCircle, Moon, Sun, UserCheck, Search,
-  TrendingUp, Calendar, Download, Filter, Eye, EyeOff
+  TrendingUp, Calendar
 } from 'lucide-react';
 
 /* ===================== CONFIGURATION ===================== */
@@ -207,7 +207,7 @@ const AddMemberForm = ({ onClose, onSuccess, showToast, colors }) => {
   );
 };
 
-/* ===================== SCANNER & PAYMENT FIX ===================== */
+/* ===================== SCANNER & PAYMENT (GPS REMOVED) ===================== */
 const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
@@ -227,12 +227,12 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
   const handleSubmitPayment = async () => {
     if (!amount || Number(amount) <= 0) return;
 
-    // FIXED: Added 'expected_amount' to the transaction insert
+    // GPS Columns removed from payload
     const { error } = await supabase.from('transactions').insert([{
       contributor_id: selectedMember.id,
       full_name: selectedMember.full_name,
       registration_no: selectedMember.registration_no,
-      expected_amount: Number(selectedMember.expected_amount), // ADDED THIS FIELD
+      expected_amount: Number(selectedMember.expected_amount),
       employee_id: profile.id,
       employee_name: profile.full_name,
       amount: Math.floor(Number(amount)),
@@ -241,7 +241,6 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
 
     if (error) {
       showToast(error.message, "error");
-      console.error("Payment Error:", error);
     } else {
       showToast("Payment recorded", "success");
       setSelectedMember(null);
