@@ -1344,21 +1344,23 @@ const LoginScreen = ({ onLogin, loading, loginMode, setLoginMode }) => (
 
 // --- STYLES ---
 const styles = {
-  /* ====== APP LAYOUT ====== */
+  /* ================= ROOT ================= */
   appContainer: {
     minHeight: '100vh',
-    background: '#f8fafc',
+    background: 'radial-gradient(circle at top, #0f172a, #020617)',
     display: 'flex',
     flexDirection: 'column',
     fontFamily: `'Inter', 'Segoe UI', sans-serif`,
-    color: '#0f172a'
+    color: '#e5e7eb'
   },
 
+  /* ================= HEADER ================= */
   appHeader: {
-    height: 64,
-    background: '#ffffff',
-    borderBottom: '1px solid #e5e7eb',
-    padding: '0 16px',
+    height: 68,
+    background: 'rgba(15,23,42,0.7)',
+    backdropFilter: 'blur(14px)',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    padding: '0 18px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1374,56 +1376,62 @@ const styles = {
   },
 
   logoDot: {
-    width: 12,
-    height: 12,
+    width: 14,
+    height: 14,
     borderRadius: '50%',
-    background: '#3b82f6'
+    background: 'linear-gradient(135deg,#22d3ee,#3b82f6)',
+    boxShadow: '0 0 14px rgba(59,130,246,.9)'
   },
 
   brandH1: {
-    fontSize: 18,
-    fontWeight: 800,
-    letterSpacing: '0.5px'
+    fontSize: 20,
+    fontWeight: 900,
+    letterSpacing: '1px'
   },
 
   brandSpan: {
-    color: '#3b82f6'
+    background: 'linear-gradient(135deg,#22d3ee,#3b82f6)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent'
   },
 
   profilePill: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    background: '#f1f5f9',
-    padding: '6px 10px',
+    background: 'rgba(255,255,255,0.06)',
+    padding: '6px 12px',
     borderRadius: 999,
     fontSize: 13,
-    fontWeight: 600
+    fontWeight: 700,
+    border: '1px solid rgba(255,255,255,0.08)'
   },
 
   profileAvatar: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     borderRadius: '50%',
-    background: '#3b82f6',
-    color: '#fff',
+    background: 'linear-gradient(135deg,#22d3ee,#3b82f6)',
+    color: '#020617',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: 13,
-    fontWeight: 700
+    fontSize: 14,
+    fontWeight: 900
   },
 
   contentArea: {
     flex: 1,
-    padding: '16px',
-    paddingBottom: 90
+    padding: '18px',
+    paddingBottom: 100
   },
 
+  /* ================= BOTTOM NAV ================= */
   bottomNav: {
-    height: 70,
-    background: '#ffffff',
-    borderTop: '1px solid #e5e7eb',
+    height: 78,
+    background: 'rgba(2,6,23,0.85)',
+    backdropFilter: 'blur(18px)',
+    borderTop: '1px solid rgba(255,255,255,0.08)',
     display: 'flex',
     justifyContent: 'space-around',
     alignItems: 'center',
@@ -1441,251 +1449,224 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     fontSize: 11,
-    color: '#64748b',
+    color: '#94a3b8',
     gap: 4,
     cursor: 'pointer'
   },
 
   navButtonActive: {
-    color: '#3b82f6'
+    color: '#22d3ee',
+    transform: 'scale(1.08)'
   },
 
   navLabel: {
-    fontWeight: 600
+    fontWeight: 700
   },
 
   scanBtn: {
-    color: '#fff',
-    background: '#3b82f6',
-    padding: '10px 14px',
-    borderRadius: 16
+    background: 'linear-gradient(135deg,#22d3ee,#3b82f6)',
+    color: '#020617',
+    padding: '14px 16px',
+    borderRadius: 20,
+    boxShadow: '0 12px 30px rgba(59,130,246,.6)'
   },
 
-  /* ====== LOCATION ====== */
+  /* ================= LOCATION ================= */
   locationBanner: {
-    background: '#eff6ff',
-    color: '#1d4ed8',
-    padding: '6px 12px',
+    background: 'linear-gradient(135deg,#22d3ee33,#3b82f633)',
+    color: '#67e8f9',
+    padding: '8px 14px',
     fontSize: 12,
     display: 'flex',
     alignItems: 'center',
-    gap: 6
+    gap: 6,
+    borderBottom: '1px solid rgba(255,255,255,.08)'
   },
 
   locationWarning: {
-    background: '#fff7ed',
-    color: '#9a3412',
-    padding: '6px 12px',
+    background: 'linear-gradient(135deg,#fb923c33,#f9731633)',
+    color: '#fed7aa',
+    padding: '8px 14px',
     fontSize: 12,
     display: 'flex',
     alignItems: 'center',
     gap: 6
   },
 
-  loadingScreen: {
-    height: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: '#f8fafc'
-  },
-
-  loadingContent: {
-    textAlign: 'center'
-  },
-
-  loadingText: {
-    fontWeight: 700,
-    marginTop: 12
-  },
-
-  loadingSubtext: {
-    fontSize: 13,
-    color: '#64748b'
-  },
-
-  spinner: {
-    animation: 'spin 1s linear infinite'
-  },
-
-  /* ====== DASHBOARD ====== */
+  /* ================= DASHBOARD ================= */
   dashboardTabs: {
     display: 'flex',
-    gap: 8,
-    marginBottom: 16
+    gap: 10,
+    marginBottom: 18
   },
 
   dashboardTab: {
     flex: 1,
-    padding: 10,
-    background: '#e5e7eb',
-    border: 'none',
-    borderRadius: 10,
+    padding: 12,
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: 14,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    fontWeight: 600,
-    cursor: 'pointer'
+    fontWeight: 700,
+    cursor: 'pointer',
+    color: '#cbd5f5'
   },
 
   dashboardTabActive: {
-    background: '#3b82f6',
-    color: '#fff'
+    background: 'linear-gradient(135deg,#22d3ee,#3b82f6)',
+    color: '#020617',
+    boxShadow: '0 12px 30px rgba(59,130,246,.6)'
   },
 
   statsGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: 12,
-    marginBottom: 16
+    gap: 14,
+    marginBottom: 18
   },
 
   statCard: {
-    background: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    boxShadow: '0 6px 16px rgba(0,0,0,0.05)'
+    background: 'rgba(255,255,255,0.06)',
+    backdropFilter: 'blur(16px)',
+    borderRadius: 20,
+    padding: 18,
+    border: '1px solid rgba(255,255,255,0.1)',
+    boxShadow: '0 20px 40px rgba(0,0,0,.5)'
   },
 
   statCardPrimary: {
-    background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-    color: '#fff'
+    background: 'linear-gradient(135deg,#22d3ee,#3b82f6)',
+    color: '#020617'
   },
 
-  statIcon: {
-    fontSize: 24
-  },
-
-  statIconSmall: {
-    fontSize: 18
-  },
+  statIcon: { fontSize: 26 },
+  statIconSmall: { fontSize: 18 },
 
   statCardLabel: {
     fontSize: 12,
-    opacity: 0.8
+    opacity: 0.85
   },
 
   statCardValue: {
-    fontSize: 22,
-    fontWeight: 800
+    fontSize: 26,
+    fontWeight: 900
   },
 
   statCardMeta: {
     fontSize: 11,
-    opacity: 0.7
+    opacity: 0.8
   },
 
-  /* ====== SEARCH ====== */
+  /* ================= SEARCH ================= */
   searchBar: {
     display: 'flex',
     alignItems: 'center',
-    background: '#ffffff',
-    padding: '10px 12px',
-    borderRadius: 12,
-    border: '1px solid #e5e7eb',
-    marginBottom: 12
+    background: 'rgba(255,255,255,0.06)',
+    padding: '12px 14px',
+    borderRadius: 16,
+    border: '1px solid rgba(255,255,255,0.1)',
+    marginBottom: 14
   },
 
-  searchIcon: {
-    color: '#94a3b8'
-  },
+  searchIcon: { color: '#67e8f9' },
 
   searchInput: {
     border: 'none',
     outline: 'none',
-    marginLeft: 8,
+    marginLeft: 10,
     flex: 1,
-    fontSize: 14
+    fontSize: 14,
+    background: 'transparent',
+    color: '#e5e7eb'
   },
 
-  /* ====== BADGES ====== */
-  badge: {
-    padding: '4px 8px',
+  /* ================= BADGES ================= */
+  badgeSuccess: {
+    background: 'linear-gradient(135deg,#22c55e,#4ade80)',
+    color: '#052e16',
+    padding: '6px 10px',
     borderRadius: 999,
     fontSize: 11,
-    fontWeight: 700
-  },
-
-  badgeSuccess: {
-    background: '#dcfce7',
-    color: '#166534'
+    fontWeight: 900
   },
 
   badgeWarning: {
-    background: '#ffedd5',
-    color: '#9a3412'
+    background: 'linear-gradient(135deg,#fb923c,#f97316)',
+    color: '#431407',
+    padding: '6px 10px',
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 900
   },
 
   badgeSuccessLarge: {
-    background: '#dcfce7',
-    color: '#166534',
-    padding: '8px 14px',
+    background: 'linear-gradient(135deg,#22c55e,#4ade80)',
+    color: '#052e16',
+    padding: '10px 18px',
     borderRadius: 999,
-    fontWeight: 800,
-    marginTop: 16
+    fontWeight: 900,
+    marginTop: 18
   },
 
   badgeWarningLarge: {
-    background: '#fee2e2',
-    color: '#991b1b',
-    padding: '8px 14px',
+    background: 'linear-gradient(135deg,#fb923c,#f97316)',
+    color: '#431407',
+    padding: '10px 18px',
     borderRadius: 999,
-    fontWeight: 800,
-    marginTop: 16
+    fontWeight: 900,
+    marginTop: 18
   },
 
-  /* ====== FORMS & BUTTONS ====== */
+  /* ================= FORMS ================= */
   cardForm: {
-    background: '#ffffff',
-    padding: 20,
-    borderRadius: 16,
-    boxShadow: '0 10px 30px rgba(0,0,0,0.05)'
+    background: 'rgba(255,255,255,0.06)',
+    backdropFilter: 'blur(20px)',
+    padding: 22,
+    borderRadius: 22,
+    border: '1px solid rgba(255,255,255,0.1)',
+    boxShadow: '0 25px 60px rgba(0,0,0,.6)'
   },
 
   input: {
     width: '100%',
-    padding: 12,
-    marginBottom: 12,
-    borderRadius: 10,
-    border: '1px solid #e5e7eb',
+    padding: 14,
+    marginBottom: 14,
+    borderRadius: 14,
+    border: '1px solid rgba(255,255,255,0.12)',
+    background: 'rgba(2,6,23,0.7)',
+    color: '#e5e7eb',
     fontSize: 14
   },
 
   btnPrimary: {
-    background: '#3b82f6',
-    color: '#ffffff',
+    background: 'linear-gradient(135deg,#22d3ee,#3b82f6)',
+    color: '#020617',
     border: 'none',
-    padding: 14,
-    borderRadius: 12,
-    fontWeight: 700,
+    padding: 16,
+    borderRadius: 16,
+    fontWeight: 900,
     width: '100%',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    boxShadow: '0 14px 40px rgba(59,130,246,.7)'
   },
 
   btnSecondary: {
-    background: '#f1f5f9',
-    border: 'none',
-    padding: 12,
-    borderRadius: 10,
-    fontWeight: 600,
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    padding: 14,
+    borderRadius: 14,
+    fontWeight: 700,
+    color: '#e5e7eb',
     cursor: 'pointer'
   },
 
-  btnSmall: {
-    background: '#3b82f6',
-    color: '#fff',
-    border: 'none',
-    padding: '6px 10px',
-    borderRadius: 8,
-    fontSize: 12,
-    cursor: 'pointer'
-  },
-
-  /* ====== STATES ====== */
+  /* ================= STATES ================= */
   emptyState: {
     textAlign: 'center',
     padding: 40,
@@ -1703,7 +1684,13 @@ const styles = {
     padding: 30
   },
 
+  spinner: {
+    animation: 'spin 1s linear infinite'
+  },
+
   fadeIn: {
-    animation: 'fadeIn 0.3s ease-in-out'
+    animation: 'fadeIn .35s ease-out'
   }
 };
+
+ 
