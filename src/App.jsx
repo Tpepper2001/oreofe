@@ -14,8 +14,19 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GEOFENCE_RADIUS_METERS = 100;
 
-// Placeholder for jsQR - In a real app, import jsQR from 'jsqr'
-const jsQR = window.jsQR || ((data, width, height) => null);
+// Haversine Distance Calculation
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // metres
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
 // Reverse Geocoding Function
 const reverseGeocode = async (lat, lng) => {
@@ -25,7 +36,6 @@ const reverseGeocode = async (lat, lng) => {
       { headers: { 'User-Agent': 'AJO-PRO-App' } }
     );
     const data = await response.json();
-    
     if (data.address) {
       const { road, suburb, city, state } = data.address;
       return {
@@ -34,18 +44,9 @@ const reverseGeocode = async (lat, lng) => {
         full: data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`
       };
     }
-    return {
-      street: 'Unknown Location',
-      area: '',
-      full: `${lat.toFixed(6)}, ${lng.toFixed(6)}`
-    };
+    return { street: 'Unknown Location', area: '', full: `${lat.toFixed(6)}, ${lng.toFixed(6)}` };
   } catch (err) {
-    console.error('Geocoding error:', err);
-    return {
-      street: 'Location unavailable',
-      area: '',
-      full: `${lat.toFixed(6)}, ${lng.toFixed(6)}`
-    };
+    return { street: 'Location unavailable', area: '', full: `${lat.toFixed(6)}, ${lng.toFixed(6)}` };
   }
 };
 
@@ -57,8 +58,13 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [loginMode, setLoginMode] = useState('admin');
 
-  // Inject animations
+  // Inject jsQR and Animations
   useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
+    script.async = true;
+    document.head.appendChild(script);
+
     const styleSheet = document.createElement("style");
     styleSheet.innerText = `
       @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -70,46 +76,27 @@ export default function App() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
     try {
       const username = e.target.username.value;
       const password = e.target.password.value;
-
       if (loginMode === 'admin') {
         if (username === 'oreofe' && password === 'oreofe') {
-          const ownerData = { id: 'admin', full_name: 'Oreofe Owner', role: 'admin', ajo_owner_id: 'admin' };
+          const ownerData = { id: 'admin', full_name: 'Oreofe Owner', role: 'admin' };
           setUser({ id: 'admin' });
           setProfile(ownerData);
-        } else {
-          alert("Access Denied: Invalid admin credentials");
-        }
+        } else { alert("Invalid Admin credentials"); }
       } else {
-        const { data: employee, error } = await supabase
-          .from('employees')
-          .select('*')
-          .eq('employee_id_number', username)
-          .eq('password', password)
-          .single();
-
-        if (error || !employee) {
-          alert("Access Denied: Invalid employee credentials");
-        } else {
+        const { data: employee } = await supabase.from('employees').select('*').eq('employee_id_number', username).eq('password', password).single();
+        if (employee) {
           setUser({ id: employee.id });
           setProfile({ ...employee, role: 'employee' });
-        }
+        } else { alert("Invalid Employee credentials"); }
       }
-    } catch (err) {
-      alert("Login failed: " + err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { alert("Login failed"); }
+    finally { setLoading(false); }
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    setProfile(null);
-    setView('dashboard');
-  };
+  const handleLogout = () => { setUser(null); setProfile(null); setView('dashboard'); };
 
   if (!user) return <LoginScreen onLogin={handleLogin} loading={loading} loginMode={loginMode} setLoginMode={setLoginMode} />;
 
@@ -117,15 +104,10 @@ export default function App() {
     <div style={styles.appContainer}>
       <LocationGate onLocationUpdate={setUserLocation}>
         <header style={styles.appHeader}>
-          <div style={styles.brand}>
-            <div style={styles.logoDot} />
-            <h1 style={styles.brandH1}>AJO<span style={styles.brandSpan}>PRO</span></h1>
-          </div>
+          <div style={styles.brand}><div style={styles.logoDot} /><h1 style={styles.brandH1}>AJO<span style={styles.brandSpan}>PRO</span></h1></div>
           <div style={styles.profilePill}>
-            <div style={styles.profileAvatar}>
-              {profile?.full_name?.charAt(0).toUpperCase()}
-            </div>
-            <span>{profile?.full_name?.split(' ')[0] || 'User'}</span>
+            <div style={styles.profileAvatar}>{profile?.full_name?.charAt(0).toUpperCase()}</div>
+            <span>{profile?.full_name?.split(' ')[0]}</span>
           </div>
         </header>
 
@@ -142,40 +124,24 @@ export default function App() {
         </main>
 
         <nav style={styles.bottomNav}>
-          <button 
-            onClick={() => setView('dashboard')} 
-            style={{...styles.navButton, ...(view === 'dashboard' ? styles.navButtonActive : {})}}
-          >
-            <LayoutDashboard size={20} />
-            <span style={styles.navLabel}>Dashboard</span>
+          <button onClick={() => setView('dashboard')} style={{...styles.navButton, ...(view === 'dashboard' ? styles.navButtonActive : {})}}>
+            <LayoutDashboard size={20} /><span style={styles.navLabel}>Dashboard</span>
           </button>
           {profile?.role === 'admin' ? (
             <>
-              <button 
-                onClick={() => setView('members')} 
-                style={{...styles.navButton, ...(view === 'members' ? styles.navButtonActive : {})}}
-              >
-                <UserPlus size={20} />
-                <span style={styles.navLabel}>Members</span>
+              <button onClick={() => setView('members')} style={{...styles.navButton, ...(view === 'members' ? styles.navButtonActive : {})}}>
+                <UserPlus size={20} /><span style={styles.navLabel}>Members</span>
               </button>
-              <button 
-                onClick={() => setView('employees')} 
-                style={{...styles.navButton, ...(view === 'employees' ? styles.navButtonActive : {})}}
-              >
-                <Settings size={20} />
-                <span style={styles.navLabel}>Agents</span>
+              <button onClick={() => setView('employees')} style={{...styles.navButton, ...(view === 'employees' ? styles.navButtonActive : {})}}>
+                <Settings size={20} /><span style={styles.navLabel}>Agents</span>
               </button>
             </>
           ) : (
-            <button style={{...styles.navButton, ...styles.scanBtn}} onClick={() => setView('dashboard')}>
-              <Scan size={20} />
-              <span style={styles.navLabel}>Scan</span>
+            <button onClick={() => setView('dashboard')} style={{...styles.navButton, ...styles.scanBtn}}>
+              <Scan size={20} /><span style={styles.navLabel}>Scan</span>
             </button>
           )}
-          <button onClick={handleLogout} style={styles.navButton}>
-            <LogOut size={20} />
-            <span style={styles.navLabel}>Logout</span>
-          </button>
+          <button onClick={handleLogout} style={styles.navButton}><LogOut size={20} /><span style={styles.navLabel}>Logout</span></button>
         </nav>
       </LocationGate>
     </div>
@@ -189,12 +155,6 @@ const LocationGate = ({ children, onLocationUpdate }) => {
   const [address, setAddress] = useState('');
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setHasLocation(true);
-      setLocationDenied(true);
-      return;
-    }
-
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
         const location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -204,42 +164,24 @@ const LocationGate = ({ children, onLocationUpdate }) => {
         setHasLocation(true);
         setLocationDenied(false);
       },
-      () => {
-        setHasLocation(true);
-        setLocationDenied(true);
-      },
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+      () => { setHasLocation(true); setLocationDenied(true); },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     );
-
     return () => navigator.geolocation.clearWatch(watchId);
   }, [onLocationUpdate]);
 
-  if (!hasLocation) {
-    return (
-      <div style={styles.loadingScreen}>
-        <div style={styles.loadingContent}>
-          <Navigation size={56} style={{color: '#3b82f6', marginBottom: 24}} />
-          <Loader2 size={40} style={styles.spinner} />
-          <p style={styles.loadingText}>Acquiring precise location...</p>
-        </div>
-      </div>
-    );
-  }
+  if (!hasLocation) return (
+    <div style={styles.loadingScreen}>
+      <Navigation size={56} style={{color: '#3b82f6', marginBottom: 24}} />
+      <Loader2 size={40} style={styles.spinner} />
+      <p>Acquiring Precise GPS...</p>
+    </div>
+  );
 
   return (
     <>
-      {locationDenied && (
-        <div style={styles.locationWarning}>
-          <AlertCircle size={16} />
-          <span>Location access denied. Some features may be limited.</span>
-        </div>
-      )}
-      {!locationDenied && address && (
-        <div style={styles.locationBanner}>
-          <MapPin size={14} />
-          <span>{address}</span>
-        </div>
-      )}
+      {locationDenied && <div style={styles.locationWarning}><AlertCircle size={16} /><span>GPS Access Denied</span></div>}
+      {!locationDenied && address && <div style={styles.locationBanner}><MapPin size={14} /><span>{address}</span></div>}
       {children}
     </>
   );
@@ -255,14 +197,7 @@ const OwnerDashboard = () => {
   const [dashboardView, setDashboardView] = useState('members');
   const [collections, setCollections] = useState([]);
   const [collectionAddresses, setCollectionAddresses] = useState({});
-  const [stats, setStats] = useState({
-    totalCollections: 0,
-    totalAmount: 0,
-    todayCollections: 0,
-    todayAmount: 0,
-    verifiedCount: 0,
-    remoteCount: 0
-  });
+  const [stats, setStats] = useState({ totalCollections: 0, totalAmount: 0, todayCollections: 0, todayAmount: 0, verifiedCount: 0, remoteCount: 0 });
 
   useEffect(() => {
     loadMembers();
@@ -276,7 +211,7 @@ const OwnerDashboard = () => {
       setMembers(data);
       data.forEach(async (member) => {
         const qrData = JSON.stringify({ id: member.id, regNo: member.registration_no, name: member.full_name, amount: member.expected_amount });
-        const qrCode = await QRCode.toDataURL(qrData, { width: 200, margin: 2 });
+        const qrCode = await QRCode.toDataURL(qrData, { width: 200, margin: 2, color: { dark: '#1e293b', light: '#ffffff' } });
         setQrCodes(prev => ({ ...prev, [member.id]: qrCode }));
       });
     }
@@ -290,7 +225,7 @@ const OwnerDashboard = () => {
       data.forEach(async (col) => {
         if (col.gps_latitude) {
           const addr = await reverseGeocode(col.gps_latitude, col.gps_longitude);
-          setCollectionAddresses(prev => ({ ...prev, [col.id]: addr }));
+          setCollectionAddresses(p => ({ ...p, [col.id]: addr }));
         }
       });
       const today = new Date().toISOString().split('T')[0];
@@ -306,14 +241,14 @@ const OwnerDashboard = () => {
     }
   };
 
-  const filteredMembers = members.filter(m => m.full_name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredMembers = members.filter(m => m.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || m.registration_no.toLowerCase().includes(searchTerm.toLowerCase()));
   const filteredCollections = collections.filter(c => c.contributors?.full_name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const printMemberCard = (member) => {
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`<html><body><img src="${qrCodes[member.id]}" /><br/><h2>${member.full_name}</h2></body></html>`);
-    printWindow.document.close();
-    printWindow.print();
+    const win = window.open('', '_blank');
+    win.document.write(`<html><head><title>Print ID</title><style>body{font-family:sans-serif;text-align:center;padding:50px}.card{border:2px solid #000;padding:20px;display:inline-block;border-radius:15px}img{width:200px}</style></head><body><div class="card"><h1>AJO-PRO</h1><img src="${qrCodes[member.id]}"/><h2>${member.full_name}</h2><p>ID: ${member.registration_no}</p></div></body></html>`);
+    win.document.close();
+    setTimeout(() => win.print(), 500);
   };
 
   return (
@@ -326,59 +261,40 @@ const OwnerDashboard = () => {
       {dashboardView === 'collections' ? (
         <>
           <div style={styles.statsGrid}>
-            <div style={{...styles.statCard, ...styles.statCardPrimary}}>
-              <p style={styles.statCardLabel}>Today</p>
-              <h2 style={styles.statCardValue}>₦{stats.todayAmount.toLocaleString()}</h2>
-            </div>
-            <div style={styles.statCard}>
-              <p style={styles.statCardLabel}>Total</p>
-              <h2 style={styles.statCardValue}>₦{stats.totalAmount.toLocaleString()}</h2>
-            </div>
+            <div style={{...styles.statCard, ...styles.statCardPrimary}}><p style={styles.statCardLabel}>Today's Revenue</p><h2 style={styles.statCardValue}>₦{stats.todayAmount.toLocaleString()}</h2></div>
+            <div style={styles.statCard}><p style={styles.statCardLabel}>Total Verified</p><h2 style={styles.statCardValue}>{stats.verifiedCount}</h2></div>
           </div>
+          <div style={styles.searchBar}><Search size={18} /><input placeholder="Search history..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} /></div>
           <div style={styles.collectionsList}>
             {filteredCollections.map(c => (
               <div key={c.id} style={styles.collectionCard}>
                 <div style={styles.collectionHeader}>
-                  <div style={styles.collectionMemberInfo}>
-                    <div style={styles.collectionAvatar}>{c.contributors?.full_name[0]}</div>
-                    <div style={styles.collectionName}>{c.contributors?.full_name}</div>
-                  </div>
+                  <div style={styles.collectionMemberInfo}><div style={styles.collectionAvatar}>{c.contributors?.full_name[0]}</div><strong>{c.contributors?.full_name}</strong></div>
                   <div style={styles.collectionAmount}>₦{c.amount}</div>
                 </div>
-                <div style={styles.collectionFooter}>
-                   <span style={c.geofence_verified ? styles.badgeSuccess : styles.badgeWarning}>
-                    {c.geofence_verified ? 'Verified' : 'Remote'}
-                   </span>
-                   <span style={styles.detailValue}>{collectionAddresses[c.id]?.street}</span>
+                <div style={styles.collectionDetails}>
+                   <span>Agent: {c.employees?.full_name}</span>
+                   <span>📍 {collectionAddresses[c.id]?.street || 'Locating...'}</span>
                 </div>
+                <div style={styles.collectionFooter}><span style={c.geofence_verified ? styles.badgeSuccess : styles.badgeWarning}>{c.geofence_verified ? '✓ Verified' : '⚠ Remote'}</span></div>
               </div>
             ))}
           </div>
         </>
       ) : (
-        <>
-          {selectedMember ? (
-            <MemberDetailView member={selectedMember} qrCode={qrCodes[selectedMember.id]} onBack={() => setSelectedMember(null)} printMemberCard={printMemberCard} />
-          ) : (
+        selectedMember ? <MemberDetailView member={selectedMember} qrCode={qrCodes[selectedMember.id]} onBack={() => setSelectedMember(null)} printMemberCard={printMemberCard} /> : (
+          <>
+            <div style={styles.searchBar}><Search size={18} /><input placeholder="Search members..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} /></div>
             <div style={styles.membersList}>
-              <div style={styles.searchBar}>
-                <Search size={18} />
-                <input placeholder="Search members..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
-              </div>
               {filteredMembers.map(m => (
                 <div key={m.id} style={styles.memberCard} onClick={() => setSelectedMember(m)}>
-                  <div style={styles.memberCardCenter}>
-                    <strong style={styles.memberCardName}>{m.full_name}</strong>
-                    <span style={styles.memberCardId}>{m.registration_no}</span>
-                  </div>
-                  <div style={styles.memberCardRight}>
-                    <div style={styles.memberAmount}>₦{m.expected_amount}</div>
-                  </div>
+                  <div style={styles.memberCardCenter}><strong style={styles.memberCardName}>{m.full_name}</strong><span>{m.registration_no}</span></div>
+                  <div style={styles.memberCardRight}><strong>₦{m.expected_amount}</strong><Eye size={16} color="#3b82f6" /></div>
                 </div>
               ))}
             </div>
-          )}
-        </>
+          </>
+        )
       )}
     </div>
   );
@@ -387,22 +303,21 @@ const OwnerDashboard = () => {
 // --- MEMBER DETAIL VIEW ---
 const MemberDetailView = ({ member, qrCode, onBack, printMemberCard }) => (
   <div style={styles.fadeIn}>
-    <button onClick={onBack} style={styles.backBtn}>← Back</button>
+    <button onClick={onBack} style={styles.backBtn}>← Back to List</button>
     <div style={styles.memberDetailCard}>
-      <div style={styles.qrSection}>
-        <img src={qrCode} alt="QR" style={styles.qrImageLarge} />
-      </div>
-      <h2 style={styles.memberName}>{member.full_name}</h2>
+      <div style={styles.qrSection}><img src={qrCode} style={styles.qrImageLarge} /></div>
+      <h2>{member.full_name}</h2>
       <div style={styles.memberInfoGrid}>
-        <div style={styles.infoItem}><span style={styles.infoLabel}>ID</span><span>{member.registration_no}</span></div>
-        <div style={styles.infoItem}><span style={styles.infoLabel}>Phone</span><span>{member.phone_number}</span></div>
+        <div style={styles.infoItem}><span style={styles.infoLabel}>ID Number</span><span>{member.registration_no}</span></div>
+        <div style={styles.infoItem}><span style={styles.infoLabel}>Daily Target</span><span>₦{member.expected_amount}</span></div>
+        <div style={styles.infoItem}><span style={styles.infoLabel}>Home GPS</span><span>Captured</span></div>
       </div>
-      <button onClick={() => printMemberCard(member)} style={styles.btnPrimary}><Printer size={18} /> Print Card</button>
+      <button onClick={() => printMemberCard(member)} style={styles.btnPrimary}><Printer size={18} /> Print Member ID</button>
     </div>
   </div>
 );
 
-// --- REGISTRATION ---
+// --- MEMBER REGISTRATION ---
 const MemberRegistration = () => {
   const [loading, setLoading] = useState(false);
   const handleSubmit = async (e) => {
@@ -413,47 +328,64 @@ const MemberRegistration = () => {
       const { error } = await supabase.from('contributors').insert([{
         full_name: fd.get('name'),
         phone_number: fd.get('phone'),
-        expected_amount: fd.get('amount'),
         address: fd.get('address'),
+        expected_amount: fd.get('amount'),
         registration_no: 'AJO' + Date.now().toString().slice(-6),
         gps_latitude: pos.coords.latitude,
-        gps_longitude: pos.coords.longitude
+        gps_longitude: pos.coords.longitude,
+        ajo_owner_id: 'admin',
+        status: 'active'
       }]);
-      if (!error) alert("Registered!");
+      if (!error) { alert("Member Registered Successfully!"); e.target.reset(); }
       setLoading(false);
     });
   };
 
   return (
     <form style={styles.cardForm} onSubmit={handleSubmit}>
-      <h3 style={styles.formTitle}>New Member</h3>
+      <h3 style={styles.formTitle}>📝 Register New Member</h3>
       <input name="name" placeholder="Full Name" required style={styles.input} />
-      <input name="phone" placeholder="Phone" required style={styles.input} />
-      <input name="address" placeholder="Address" required style={styles.input} />
-      <input name="amount" type="number" placeholder="Daily Amount" required style={styles.input} />
-      <button disabled={loading} style={styles.btnPrimary}>{loading ? <Loader2 style={styles.spinner} /> : 'Register'}</button>
+      <input name="phone" placeholder="Phone Number" required style={styles.input} />
+      <input name="address" placeholder="Physical Address" required style={styles.input} />
+      <input name="amount" type="number" placeholder="Daily Amount (₦)" required style={styles.input} />
+      <button disabled={loading} style={styles.btnPrimary}>{loading ? <Loader2 style={styles.spinner}/> : 'Capture GPS & Register'}</button>
     </form>
   );
 };
 
-// --- EMPLOYEE MGMT ---
+// --- EMPLOYEE MANAGEMENT ---
 const EmployeeManagement = () => {
   const [emps, setEmps] = useState([]);
   useEffect(() => {
     supabase.from('employees').select('*').then(({ data }) => setEmps(data || []));
   }, []);
 
+  const addAgent = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const { error } = await supabase.from('employees').insert([{
+      full_name: fd.get('name'),
+      employee_id_number: 'EMP' + Math.floor(Math.random() * 1000),
+      password: fd.get('pass'),
+      ajo_owner_id: 'admin'
+    }]);
+    if (!error) window.location.reload();
+  };
+
   return (
     <div style={styles.cardForm}>
-      <h3 style={styles.formTitle}>Field Agents</h3>
+      <h3 style={styles.formTitle}>👥 Field Agents</h3>
+      <form onSubmit={addAgent} style={{marginBottom: 20}}>
+        <input name="name" placeholder="Agent Name" style={styles.input} required />
+        <input name="pass" placeholder="Password" style={styles.input} required />
+        <button style={styles.btnPrimary}>Add New Agent</button>
+      </form>
       <div style={styles.employeeList}>
         {emps.map(e => (
           <div key={e.id} style={styles.employeeCard}>
             <div style={styles.employeeAvatar}>{e.full_name[0]}</div>
-            <div style={styles.employeeInfo}>
-              <strong>{e.full_name}</strong>
-              <small>{e.employee_id_number}</small>
-            </div>
+            <div style={styles.employeeInfo}><strong>{e.full_name}</strong><span>ID: {e.employee_id_number}</span></div>
+            <span style={styles.badgeSuccess}>Active</span>
           </div>
         ))}
       </div>
@@ -461,71 +393,119 @@ const EmployeeManagement = () => {
   );
 };
 
-// --- COLLECTION INTERFACE ---
+// --- COLLECTION INTERFACE (FIXED SCANNER) ---
 const CollectionInterface = ({ profile, userLocation }) => {
   const [scanning, setScanning] = useState(false);
+  const [result, setResult] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const streamRef = useRef(null);
 
   const startScanning = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    setScanning(true);
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play();
-      requestAnimationFrame(tick);
-    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      streamRef.current = stream;
+      setScanning(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        requestAnimationFrame(tick);
+      }
+    } catch (err) { alert("Camera Permission Required"); }
   };
 
   const tick = () => {
     if (videoRef.current?.readyState === videoRef.current?.HAVE_ENOUGH_DATA) {
       const canvas = canvasRef.current;
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
+      const video = videoRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
-      if (code) {
-        alert("Scanned: " + code.data);
-        setScanning(false);
+      const code = window.jsQR ? window.jsQR(imageData.data, imageData.width, imageData.height) : null;
+
+      if (code && !isProcessing) {
+        setIsProcessing(true);
+        processScan(code.data);
         return;
       }
     }
-    if (scanning) requestAnimationFrame(tick);
+    if (scanning && !result) requestAnimationFrame(tick);
   };
+
+  const processScan = async (data) => {
+    try {
+      const parsed = JSON.parse(data);
+      const { data: member } = await supabase.from('contributors').select('*').eq('id', parsed.id).single();
+      if (!member) throw new Error("Member unknown");
+
+      const dist = calculateDistance(userLocation.lat, userLocation.lng, member.gps_latitude, member.gps_longitude);
+      const verified = dist <= GEOFENCE_RADIUS_METERS;
+
+      const { error } = await supabase.from('transactions').insert([{
+        contributor_id: member.id,
+        employee_id: profile.id,
+        amount: member.expected_amount,
+        geofence_verified: verified,
+        gps_latitude: userLocation.lat,
+        gps_longitude: userLocation.lng,
+        distance_from_registered: Math.round(dist),
+        ajo_owner_id: 'admin'
+      }]);
+
+      if (!error) setResult({ name: member.full_name, amount: member.expected_amount, verified });
+    } catch (e) { alert("Invalid QR Code"); setIsProcessing(false); }
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    setScanning(false);
+  };
+
+  if (result) return (
+    <div style={styles.successCard}>
+      <CheckCircle size={64} color="#10b981" />
+      <h2>Collection Logged</h2>
+      <h1 style={{fontSize: 42, margin: '10px 0'}}>₦{result.amount}</h1>
+      <p>{result.name}</p>
+      <div style={result.verified ? styles.badgeSuccessLarge : styles.badgeWarningLarge}>{result.verified ? '✓ Location Verified' : '⚠ Remote Collection'}</div>
+      <button onClick={() => {setResult(null); setIsProcessing(false);}} style={{...styles.btnPrimary, marginTop: 20}}>Scan Next</button>
+    </div>
+  );
 
   return (
     <div style={styles.scannerCard}>
-      {scanning ? (
-        <div style={styles.scannerContainer}>
-          <video ref={videoRef} style={styles.scannerVideo} />
-          <canvas ref={canvasRef} style={{ display: 'none' }} />
-          <button onClick={() => setScanning(false)} style={styles.btnSecondary}>Cancel</button>
+      {!scanning ? (
+        <div style={{textAlign: 'center'}}>
+          <Scan size={80} color="#3b82f6" style={{marginBottom: 20}} />
+          <h3>Agent Terminal</h3>
+          <p style={{color: '#94a3b8', marginBottom: 20}}>Position camera over member's QR code</p>
+          <button onClick={startScanning} style={styles.btnPrimary}><Camera size={20} /> Open Camera</button>
         </div>
       ) : (
-        <button onClick={startScanning} style={styles.btnPrimary}><Camera /> Start Scan</button>
+        <div style={styles.scannerContainer}>
+          <video ref={videoRef} style={styles.scannerVideo} playsInline />
+          <canvas ref={canvasRef} style={{display: 'none'}} />
+          <button onClick={() => {setScanning(false); if(streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());}} style={styles.closeScan}><X /></button>
+        </div>
       )}
     </div>
   );
 };
 
-// --- LOGIN ---
+// --- LOGIN SCREEN ---
 const LoginScreen = ({ onLogin, loading, loginMode, setLoginMode }) => (
   <div style={styles.loginPage}>
     <div style={styles.loginCard}>
-      <div style={styles.loginHeader}>
-        <Landmark size={48} />
-        <h2 style={styles.loginTitle}>AJO-PRO</h2>
-      </div>
+      <Landmark size={48} color="#3b82f6" />
+      <h2 style={{margin: '10px 0 30px'}}>AJO-PRO SECURE</h2>
       <div style={styles.loginToggle}>
-        <button onClick={() => setLoginMode('admin')} style={{...styles.toggleBtn, ...(loginMode === 'admin' ? styles.toggleBtnActive : {})}}>Admin</button>
+        <button onClick={() => setLoginMode('admin')} style={{...styles.toggleBtn, ...(loginMode === 'admin' ? styles.toggleBtnActive : {})}}>Owner</button>
         <button onClick={() => setLoginMode('agent')} style={{...styles.toggleBtn, ...(loginMode === 'agent' ? styles.toggleBtnActive : {})}}>Agent</button>
       </div>
-      <form onSubmit={onLogin} style={styles.loginForm}>
-        <input name="username" placeholder="Username" style={styles.input} />
-        <input name="password" type="password" placeholder="Password" style={styles.input} />
-        <button disabled={loading} style={styles.btnPrimary}>Login</button>
+      <form onSubmit={onLogin}>
+        <input name="username" placeholder="Username / ID" style={styles.input} required />
+        <input name="password" type="password" placeholder="Password" style={styles.input} required />
+        <button disabled={loading} style={styles.btnPrimary}>{loading ? <Loader2 style={styles.spinner} /> : 'Login System'}</button>
       </form>
     </div>
   </div>
@@ -533,85 +513,74 @@ const LoginScreen = ({ onLogin, loading, loginMode, setLoginMode }) => (
 
 // --- STYLES ---
 const styles = {
-  appContainer: { minHeight: '100vh', background: '#020617', color: '#e5e7eb', fontFamily: 'sans-serif' },
-  appHeader: { height: 68, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', borderBottom: '1px solid #1e293b' },
+  appContainer: { minHeight: '100vh', background: '#020617', color: '#f8fafc', fontFamily: 'sans-serif' },
+  appHeader: { height: 65, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', background: '#0f172a', borderBottom: '1px solid #1e293b' },
   brand: { display: 'flex', alignItems: 'center', gap: 10 },
-  logoDot: { width: 12, height: 12, borderRadius: '50%', background: '#22d3ee' },
+  logoDot: { width: 12, height: 12, background: '#22d3ee', borderRadius: '50%', boxShadow: '0 0 10px #22d3ee' },
   brandH1: { fontSize: 20, fontWeight: 900 },
   brandSpan: { color: '#3b82f6' },
-  profilePill: { display: 'flex', alignItems: 'center', gap: 8, background: '#1e293b', padding: '6px 12px', borderRadius: 20 },
-  profileAvatar: { width: 24, height: 24, borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 },
+  profilePill: { display: 'flex', alignItems: 'center', gap: 8, background: '#1e293b', padding: '5px 12px', borderRadius: 20, fontSize: 13 },
+  profileAvatar: { width: 24, height: 24, background: '#3b82f6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 },
   contentArea: { padding: 20, paddingBottom: 100 },
-  bottomNav: { position: 'fixed', bottom: 0, left: 0, right: 0, height: 70, background: '#0f172a', display: 'flex', justifyContent: 'space-around', alignItems: 'center', borderTop: '1px solid #1e293b' },
-  navButton: { background: 'none', border: 'none', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 },
+  bottomNav: { position: 'fixed', bottom: 0, width: '100%', height: 75, background: '#0f172a', display: 'flex', justifyContent: 'space-around', alignItems: 'center', borderTop: '1px solid #1e293b' },
+  navButton: { background: 'none', border: 'none', color: '#64748b', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 },
   navButtonActive: { color: '#22d3ee' },
-  scanBtn: { background: '#3b82f6', color: '#fff', padding: '10px 20px', borderRadius: 15 },
   navLabel: { fontSize: 10, fontWeight: 700 },
-  
-  // Dashboard & Stats
-  dashboardTabs: { display: 'flex', gap: 10, marginBottom: 20 },
-  dashboardTab: { flex: 1, padding: 12, background: '#1e293b', border: 'none', color: '#fff', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' },
-  dashboardTabActive: { background: '#3b82f6' },
+  scanBtn: { color: '#22d3ee' },
+  locationBanner: { background: '#1e293b', padding: '8px 20px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, color: '#22d3ee' },
+  locationWarning: { background: '#450a0a', padding: '8px 20px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, color: '#f87171' },
   statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 20 },
-  statCard: { background: '#1e293b', padding: 15, borderRadius: 15 },
-  statCardPrimary: { background: '#3b82f6' },
+  statCard: { background: '#0f172a', padding: 20, borderRadius: 20, border: '1px solid #1e293b' },
+  statCardPrimary: { background: '#3b82f6', color: '#fff' },
   statCardLabel: { fontSize: 12, opacity: 0.8 },
-  statCardValue: { fontSize: 22, fontWeight: 900 },
-  
-  // Lists & Cards
-  collectionsList: { display: 'flex', flexDirection: 'column', gap: 10 },
-  collectionCard: { background: '#1e293b', padding: 15, borderRadius: 15 },
+  statCardValue: { fontSize: 24, fontWeight: 900 },
+  dashboardTabs: { display: 'flex', gap: 10, marginBottom: 20 },
+  dashboardTab: { flex: 1, padding: 12, background: '#0f172a', border: '1px solid #1e293b', color: '#fff', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' },
+  dashboardTabActive: { background: '#3b82f6', borderColor: '#3b82f6' },
+  searchBar: { display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', padding: '12px 15px', borderRadius: 15, marginBottom: 20, border: '1px solid #1e293b' },
+  searchInput: { background: 'none', border: 'none', color: '#fff', width: '100%', outline: 'none' },
+  collectionCard: { background: '#0f172a', padding: 15, borderRadius: 20, marginBottom: 12, border: '1px solid #1e293b' },
   collectionHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 10 },
   collectionMemberInfo: { display: 'flex', alignItems: 'center', gap: 10 },
-  collectionAvatar: { width: 32, height: 32, borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  collectionName: { fontWeight: 700 },
+  collectionAvatar: { width: 30, height: 30, background: '#1e293b', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   collectionAmount: { fontWeight: 900, color: '#22d3ee' },
-  collectionFooter: { display: 'flex', justifyContent: 'space-between', fontSize: 12 },
-  
+  collectionDetails: { fontSize: 12, color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 },
+  collectionFooter: { marginTop: 10 },
+  badgeSuccess: { background: '#064e3b', color: '#34d399', padding: '4px 10px', borderRadius: 10, fontSize: 10, fontWeight: 700 },
+  badgeWarning: { background: '#450a0a', color: '#f87171', padding: '4px 10px', borderRadius: 10, fontSize: 10, fontWeight: 700 },
   membersList: { display: 'flex', flexDirection: 'column', gap: 10 },
-  memberCard: { background: '#1e293b', padding: 15, borderRadius: 15, display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  memberCardCenter: { display: 'flex', flexDirection: 'column' },
+  memberCard: { background: '#0f172a', padding: 15, borderRadius: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #1e293b' },
+  memberCardCenter: { display: 'flex', flexDirection: 'column', gap: 4 },
   memberCardName: { fontSize: 16 },
-  memberCardId: { fontSize: 12, color: '#94a3b8' },
-  memberCardRight: { textAlign: 'right' },
-  memberAmount: { fontWeight: 700 },
-
-  // Forms & Detail
-  cardForm: { background: '#1e293b', padding: 20, borderRadius: 20 },
-  formTitle: { marginBottom: 15 },
-  input: { width: '100%', padding: 12, marginBottom: 10, borderRadius: 10, border: '1px solid #334155', background: '#0f172a', color: '#fff' },
-  btnPrimary: { width: '100%', padding: 14, background: '#3b82f6', border: 'none', color: '#fff', borderRadius: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  btnSecondary: { padding: 10, background: '#334155', border: 'none', color: '#fff', borderRadius: 8 },
-  
-  memberDetailCard: { background: '#1e293b', padding: 20, borderRadius: 20, textAlign: 'center' },
-  qrSection: { background: '#fff', padding: 15, borderRadius: 15, display: 'inline-block', marginBottom: 20 },
+  memberCardRight: { display: 'flex', alignItems: 'center', gap: 10 },
+  memberDetailCard: { background: '#0f172a', padding: 30, borderRadius: 25, border: '1px solid #1e293b', textAlign: 'center' },
+  qrSection: { background: '#fff', padding: 15, borderRadius: 20, display: 'inline-block', marginBottom: 20 },
   qrImageLarge: { width: 180, height: 180 },
-  memberName: { marginBottom: 20 },
-  memberInfoGrid: { textAlign: 'left', marginBottom: 20 },
-  infoItem: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #334155' },
-  infoLabel: { color: '#94a3b8' },
-  backBtn: { background: 'none', border: 'none', color: '#3b82f6', marginBottom: 15 },
-
-  // Login
-  loginPage: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#020617' },
-  loginCard: { width: '100%', maxWidth: 360, padding: 30, background: '#0f172a', borderRadius: 25, textAlign: 'center' },
-  loginHeader: { marginBottom: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 },
-  loginTitle: { fontSize: 28, fontWeight: 900 },
-  loginToggle: { display: 'flex', background: '#1e293b', borderRadius: 12, padding: 4, marginBottom: 20 },
-  toggleBtn: { flex: 1, padding: 8, background: 'none', border: 'none', color: '#94a3b8', borderRadius: 8 },
+  memberInfoGrid: { textAlign: 'left', marginBottom: 30 },
+  infoItem: { display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #1e293b' },
+  infoLabel: { color: '#64748b' },
+  backBtn: { background: 'none', border: 'none', color: '#3b82f6', marginBottom: 20, fontWeight: 700 },
+  cardForm: { background: '#0f172a', padding: 25, borderRadius: 25, border: '1px solid #1e293b' },
+  formTitle: { marginBottom: 20 },
+  input: { width: '100%', padding: 14, background: '#020617', border: '1px solid #1e293b', borderRadius: 12, color: '#fff', marginBottom: 15, boxSizing: 'border-box' },
+  btnPrimary: { width: '100%', padding: 16, background: '#3b82f6', border: 'none', color: '#fff', borderRadius: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer' },
+  employeeList: { display: 'flex', flexDirection: 'column', gap: 10 },
+  employeeCard: { background: '#1e293b', padding: 15, borderRadius: 15, display: 'flex', alignItems: 'center', gap: 15 },
+  employeeAvatar: { width: 35, height: 35, background: '#3b82f6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 },
+  employeeInfo: { flex: 1, display: 'flex', flexDirection: 'column' },
+  scannerCard: { background: '#0f172a', padding: 30, borderRadius: 30, border: '1px solid #1e293b' },
+  scannerContainer: { position: 'relative', background: '#000', borderRadius: 20, overflow: 'hidden' },
+  scannerVideo: { width: '100%', display: 'block' },
+  closeScan: { position: 'absolute', top: 15, right: 15, background: 'rgba(0,0,0,0.5)', border: 'none', color: '#fff', padding: 8, borderRadius: '50%' },
+  successCard: { background: '#0f172a', padding: 40, borderRadius: 30, border: '1px solid #1e293b', textAlign: 'center' },
+  badgeSuccessLarge: { background: '#064e3b', color: '#34d399', padding: '10px 20px', borderRadius: 20, fontWeight: 700, marginTop: 15 },
+  badgeWarningLarge: { background: '#450a0a', color: '#f87171', padding: '10px 20px', borderRadius: 20, fontWeight: 700, marginTop: 15 },
+  loginPage: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  loginCard: { background: '#0f172a', padding: 40, borderRadius: 30, width: '100%', maxWidth: 400, textAlign: 'center', border: '1px solid #1e293b' },
+  loginToggle: { display: 'flex', background: '#020617', padding: 5, borderRadius: 15, marginBottom: 30 },
+  toggleBtn: { flex: 1, padding: 10, background: 'none', border: 'none', color: '#64748b', borderRadius: 12 },
   toggleBtnActive: { background: '#3b82f6', color: '#fff' },
-  
-  // Misc
-  loadingScreen: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
-  locationBanner: { background: '#1e293b', padding: '8px 20px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 },
-  locationWarning: { background: '#7f1d1d', padding: '8px 20px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 },
-  searchBar: { display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', padding: '10px 15px', borderRadius: 10, marginBottom: 15 },
-  searchInput: { background: 'none', border: 'none', color: '#fff', outline: 'none', width: '100%' },
-  badgeSuccess: { background: '#065f46', color: '#34d399', padding: '2px 8px', borderRadius: 10, fontSize: 10 },
-  badgeWarning: { background: '#7c2d12', color: '#fb923c', padding: '2px 8px', borderRadius: 10, fontSize: 10 },
-  scannerCard: { textAlign: 'center' },
-  scannerContainer: { position: 'relative', width: '100%', maxWidth: 400, margin: '0 auto' },
-  scannerVideo: { width: '100%', borderRadius: 20, marginBottom: 20 },
+  loadingScreen: { height: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 },
   spinner: { animation: 'spin 1s linear infinite' },
-  fadeIn: { animation: 'fadeIn 0.3s ease-out' }
+  fadeIn: { animation: 'fadeIn 0.4s ease-out' }
 };
