@@ -18,6 +18,7 @@ const GEOFENCE_RADIUS_METERS = 100;
 /* ===================== UTILS ===================== */
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 999999;
   const R = 6371e3; 
   const φ1 = lat1 * Math.PI / 180;
   const φ2 = lat2 * Math.PI / 180;
@@ -36,16 +37,17 @@ export default function App() {
   const [loginMode, setLoginMode] = useState('admin');
 
   useEffect(() => {
+    // Load Scanner Library
     const script = document.createElement("script");
     script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
     script.async = true;
     document.head.appendChild(script);
 
+    // Global Styles & Animations
     const styleSheet = document.createElement("style");
     styleSheet.innerText = `
       @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-      @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
       .scanner-laser { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #ef4444; box-shadow: 0 0 15px #ef4444; animation: scanMove 2s infinite linear; z-index: 10; }
       @keyframes scanMove { 0% { top: 5% } 100% { top: 95% } }
     `;
@@ -119,99 +121,127 @@ export default function App() {
   );
 }
 
-// --- UPDATED LOCATION GATE (ROBUST GPS) ---
+// --- PRODUCTION LOCATION GATE ---
 const LocationGate = ({ children, onLocationUpdate }) => {
-  const [status, setStatus] = useState('waiting'); // 'waiting', 'locating', 'ready', 'denied'
+  const [status, setStatus] = useState('waiting'); 
   const [errorDetails, setErrorDetails] = useState('');
+  const watchIdRef = useRef(null);
 
-  const startGPS = (highAccuracy = true) => {
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  const requestGPS = async () => {
     setStatus('locating');
-    
+
     if (!navigator.geolocation) {
       setStatus('denied');
-      setErrorDetails("Your browser is too old to support GPS.");
+      setErrorDetails('Geolocation not supported by this browser.');
       return;
     }
 
-    const options = {
-      enableHighAccuracy: highAccuracy,
-      timeout: 20000, 
-      maximumAge: 0
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        onLocationUpdate({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setStatus('ready');
-        // Switch to continuous watch once first lock is found
-        navigator.geolocation.watchPosition(
-          (p) => onLocationUpdate({ lat: p.coords.latitude, lng: p.coords.longitude }),
-          null,
-          { enableHighAccuracy: true }
-        );
-      },
-      (err) => {
-        console.error("GPS Error:", err);
-        if (highAccuracy) {
-          // If Satellite failed, try Network/Wifi (Low Accuracy)
-          console.log("Retrying with standard accuracy...");
-          startGPS(false);
-        } else {
-          if (err.code === 1) setStatus('denied');
-          else setStatus('denied');
-          setErrorDetails(err.message);
+    try {
+      if (navigator.permissions) {
+        const permission = await navigator.permissions.query({ name: 'geolocation' });
+        if (permission.state === 'denied') {
+          setStatus('denied');
+          setErrorDetails('Location permission denied. Please reset permissions in browser settings.');
+          return;
         }
-      },
-      options
-    );
+      }
+
+      const options = {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      };
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const coords = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy
+          };
+
+          if (coords.accuracy > 150) {
+            setErrorDetails('Signal too weak (Accuracy: ' + Math.round(coords.accuracy) + 'm). Move outdoors.');
+            setStatus('locating'); 
+            return;
+          }
+
+          onLocationUpdate(coords);
+          setStatus('ready');
+
+          watchIdRef.current = navigator.geolocation.watchPosition(
+            (p) => {
+              onLocationUpdate({
+                lat: p.coords.latitude,
+                lng: p.coords.longitude,
+                accuracy: p.coords.accuracy
+              });
+            },
+            null,
+            { enableHighAccuracy: true, maximumAge: 0 }
+          );
+        },
+        (err) => {
+          setStatus('denied');
+          setErrorDetails(err.message);
+        },
+        options
+      );
+    } catch (err) {
+      setStatus('denied');
+      setErrorDetails(err.message);
+    }
   };
 
-  if (status === 'waiting' || status === 'locating') return (
-    <div style={styles.fullState}>
-      <div style={styles.gpsPulse}><MapPin size={60} color="#3b82f6" /></div>
-      <h2 style={{marginTop: 20}}>{status === 'waiting' ? 'Secure GPS Link' : 'Connecting...'}</h2>
-      <p style={styles.gpsSubtext}>
-        {status === 'waiting' 
-          ? 'Agents must be physically present at collection points to proceed.' 
-          : 'Attempting to lock satellite signal. Stand near a window or outdoors.'}
-      </p>
-      {status === 'waiting' && (
-        <button onClick={() => startGPS(true)} style={styles.btnPrimary}>
-          <Navigation size={20} /> ENABLE SYSTEM GPS
-        </button>
-      )}
-      {status === 'locating' && <Loader2 size={30} style={styles.spinner} color="#22d3ee" />}
-    </div>
-  );
-
-  if (status === 'denied') return (
-    <div style={styles.fullState}>
-      <AlertCircle size={60} color="#ef4444" />
-      <h2 style={{marginTop: 20}}>GPS Access Blocked</h2>
-      <div style={styles.instructionBox}>
-        <p>1. Tap the <strong>Lock Icon</strong> 🔒 next to the website URL.</p>
-        <p>2. Set <strong>Location</strong> to "Allow".</p>
-        <p>3. Refresh this page.</p>
+  if (status !== 'ready') {
+    return (
+      <div style={styles.fullState}>
+        <MapPin size={60} color="#3b82f6" />
+        <h2 style={{ marginTop: 20 }}>
+          {status === 'waiting' && 'GPS Required'}
+          {status === 'locating' && 'Acquiring GPS Lock'}
+          {status === 'denied' && 'GPS Blocked'}
+        </h2>
+        <p style={styles.gpsSubtext}>
+          {status === 'waiting' && 'Authorize location to access the collection system.'}
+          {status === 'locating' && 'Stand outdoors or near a window for a satellite lock.'}
+          {status === 'denied' && errorDetails}
+        </p>
+        {(status === 'waiting' || status === 'denied') && (
+          <button onClick={requestGPS} style={styles.btnPrimary}>ENABLE GPS</button>
+        )}
+        {status === 'locating' && <Loader2 size={32} style={styles.spinner} />}
       </div>
-      <p style={{fontSize: 12, color: '#64748b', marginBottom: 20}}>Error: {errorDetails}</p>
-      <button onClick={() => window.location.reload()} style={styles.btnPrimary}>
-        <RefreshCw size={20} /> REFRESH SYSTEM
-      </button>
-    </div>
-  );
+    );
+  }
 
   return children;
 };
 
-// --- SCANNING COMPONENT ---
+// --- COLLECTION INTERFACE (SCANNER) ---
 const CollectionInterface = ({ profile, userLocation }) => {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState(null);
+  const [processing, setProcessing] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
 
   const startScan = async () => {
+    // 🛡️ GPS STABILITY GUARD
+    if (!userLocation || userLocation.accuracy > 150) {
+      alert("GPS not stable (Accuracy: " + Math.round(userLocation?.accuracy || 0) + "m). Move outdoors and wait for lock.");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
@@ -223,11 +253,11 @@ const CollectionInterface = ({ profile, userLocation }) => {
         videoRef.current.play();
         requestAnimationFrame(tick);
       }
-    } catch (e) { alert("Enable camera in settings to scan."); }
+    } catch (e) { alert("Camera access denied."); }
   };
 
   const tick = () => {
-    if (videoRef.current?.readyState === videoRef.current?.HAVE_ENOUGH_DATA) {
+    if (videoRef.current?.readyState === videoRef.current?.HAVE_ENOUGH_DATA && !processing) {
       const canvas = canvasRef.current;
       const video = videoRef.current;
       canvas.width = video.videoWidth;
@@ -242,14 +272,24 @@ const CollectionInterface = ({ profile, userLocation }) => {
         return;
       }
     }
-    if (!result && scanning) requestAnimationFrame(tick);
+    if (scanning && !result) requestAnimationFrame(tick);
   };
 
   const handleScan = async (data) => {
+    setProcessing(true);
     try {
       const parsed = JSON.parse(data);
       const { data: member } = await supabase.from('contributors').select('*').eq('id', parsed.id).single();
       
+      if (!member) throw new Error("Unknown Member QR");
+
+      // 🛡️ MEMBER GPS GUARD
+      if (!member.gps_latitude || !member.gps_longitude) {
+        alert("This member has no registered home GPS coordinates.");
+        setProcessing(false);
+        return;
+      }
+
       const dist = calculateDistance(userLocation.lat, userLocation.lng, member.gps_latitude, member.gps_longitude);
       const verified = dist <= GEOFENCE_RADIUS_METERS;
 
@@ -260,7 +300,7 @@ const CollectionInterface = ({ profile, userLocation }) => {
       }]);
 
       setResult({ name: member.full_name, amount: member.expected_amount, verified });
-    } catch (e) { alert("Invalid QR Code"); }
+    } catch (e) { alert("Invalid QR Code."); setProcessing(false); }
     stopCamera();
   };
 
@@ -273,11 +313,11 @@ const CollectionInterface = ({ profile, userLocation }) => {
     <div style={styles.successCard}>
       <CheckCircle size={80} color="#10b981" />
       <h1 style={{fontSize: 40, margin: '20px 0'}}>₦{result.amount}</h1>
-      <p style={{fontSize: 20, fontWeight: 700}}>{result.name}</p>
+      <p style={{fontSize: 18}}>{result.name}</p>
       <div style={result.verified ? styles.badgeSuccess : styles.badgeWarning}>
-        {result.verified ? '✓ LOCATION VERIFIED' : '⚠ REMOTE COLLECTION'}
+        {result.verified ? '✓ VERIFIED AT SITE' : '⚠ REMOTE COLLECTION'}
       </div>
-      <button onClick={() => setResult(null)} style={{...styles.btnPrimary, marginTop: 40}}>NEXT SCAN</button>
+      <button onClick={() => {setResult(null); setProcessing(false);}} style={{...styles.btnPrimary, marginTop: 40}}>CONTINUE</button>
     </div>
   );
 
@@ -286,8 +326,8 @@ const CollectionInterface = ({ profile, userLocation }) => {
       {!scanning ? (
         <div style={{textAlign: 'center', padding: '40px 0'}}>
           <Scan size={100} color="#3b82f6" />
-          <h2 style={{marginTop: 20}}>Scan Member ID</h2>
-          <p style={{color: '#64748b', marginBottom: 30}}>GPS Connection: Stable ✅</p>
+          <h2 style={{marginTop: 20}}>Ready to Scan</h2>
+          <p style={{color: '#64748b', marginBottom: 30}}>GPS Accuracy: {Math.round(userLocation?.accuracy)}m</p>
           <button onClick={startScan} style={styles.btnPrimary}><Camera /> OPEN CAMERA</button>
         </div>
       ) : (
@@ -302,27 +342,27 @@ const CollectionInterface = ({ profile, userLocation }) => {
   );
 };
 
-// --- COMPONENTS ---
+// --- OTHER DASHBOARD COMPONENTS ---
 const OwnerDashboard = () => (
-    <div style={styles.fadeIn}>
-      <div style={styles.statsGrid}>
-        <div style={{...styles.statCard, ...styles.statCardPrimary}}><p>Revenue</p><h2>₦240,000</h2></div>
-        <div style={styles.statCard}><p>Members</p><h2>48</h2></div>
-      </div>
+  <div style={styles.fadeIn}>
+    <div style={styles.statsGrid}>
+      <div style={{...styles.statCard, ...styles.statCardPrimary}}><p>Daily Revenue</p><h2>₦240,500</h2></div>
+      <div style={styles.statCard}><p>Active Members</p><h2>84</h2></div>
     </div>
+    <p style={{textAlign: 'center', color: '#64748b'}}>AJO-PRO Monitoring Active</p>
+  </div>
 );
 
 const MemberRegistration = () => (
-    <form style={styles.cardForm}>
-      <h3>Member Registration</h3>
-      <p style={{fontSize: 12, color: '#64748b', marginBottom: 20}}>You must be standing at the member's house to register.</p>
-      <input placeholder="Full Name" style={styles.input} />
-      <input placeholder="Phone" style={styles.input} />
-      <button style={styles.btnPrimary}>CAPTURE HOME GPS & SAVE</button>
-    </form>
+  <form style={styles.cardForm}>
+    <h3>New Registration</h3>
+    <input placeholder="Name" style={styles.input} />
+    <input placeholder="Amount" style={styles.input} />
+    <button style={styles.btnPrimary}>Capture GPS & Register</button>
+  </form>
 );
 
-const EmployeeManagement = () => <div style={styles.cardForm}><h3>Agent List</h3><p>Active Agents: 4</p></div>;
+const EmployeeManagement = () => <div style={styles.cardForm}><h3>Agent List</h3><p>System verified agents: 4</p></div>;
 
 const LoginScreen = ({ onLogin, loading, loginMode, setLoginMode }) => (
   <div style={styles.loginPage}>
@@ -336,7 +376,7 @@ const LoginScreen = ({ onLogin, loading, loginMode, setLoginMode }) => (
       <form onSubmit={onLogin}>
         <input name="username" placeholder="ID Number" style={styles.input} required />
         <input name="password" type="password" placeholder="Password" style={styles.input} required />
-        <button disabled={loading} style={styles.btnPrimary}>{loading ? 'VERIFYING...' : 'LOGIN SYSTEM'}</button>
+        <button disabled={loading} style={styles.btnPrimary}>{loading ? 'LOGGING IN...' : 'LOGIN'}</button>
       </form>
     </div>
   </div>
@@ -356,10 +396,8 @@ const styles = {
   bottomNav: { position: 'fixed', bottom: 0, width: '100%', height: 75, background: '#0f172a', display: 'flex', justifyContent: 'space-around', alignItems: 'center', borderTop: '1px solid #1e293b' },
   navButton: { background: 'none', border: 'none', color: '#64748b', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700 },
   navButtonActive: { color: '#22d3ee' },
-  fullState: { height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  gpsPulse: { animation: 'pulse 2s infinite' },
-  gpsSubtext: { textAlign: 'center', color: '#94a3b8', margin: '15px 40px 30px' },
-  instructionBox: { background: '#0f172a', padding: 20, borderRadius: 15, margin: '20px 0', border: '1px solid #1e293b', textAlign: 'left' },
+  fullState: { height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center' },
+  gpsSubtext: { color: '#94a3b8', margin: '15px 40px 30px' },
   btnPrimary: { padding: '16px 30px', background: '#3b82f6', border: 'none', color: '#fff', borderRadius: 12, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' },
   scannerCard: { background: '#0f172a', borderRadius: 30, padding: 20, border: '1px solid #1e293b' },
   scannerContainer: { position: 'relative', overflow: 'hidden', borderRadius: 20, background: '#000' },
