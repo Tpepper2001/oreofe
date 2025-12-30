@@ -1,33 +1,356 @@
-/* 1. AT THE VERY TOP: External Imports */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,900;1,900&family=Inter:wght@400;500;700;900&display=swap');
-
-/* 2. Tailwind (If you are using Tailwind) */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* 3. Base Styles */
+/* =========================
+   ROOT & RESET
+========================= */
 :root {
-  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  --primary: #2563eb;
+  --primary-dark: #1e40af;
+  --accent: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --muted: #64748b;
+  --text: #0f172a;
+  --border: #e5e7eb;
+  --radius: 16px;
+  --shadow-sm: 0 4px 12px rgba(0,0,0,.05);
+  --shadow-md: 0 12px 30px rgba(0,0,0,.08);
+  --shadow-lg: 0 30px 60px rgba(0,0,0,.15);
 }
 
-body {
+* {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+html, body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* =========================
+   APP LAYOUT
+========================= */
+.app {
   min-height: 100vh;
-  background-color: #f8fafc;
-  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Custom class for the Oreofe Brand Font */
-.brand-font {
-  font-family: 'Playfair Display', serif;
+header {
+  height: 70px;
+  background: rgba(255,255,255,0.9);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
-/* Prevent text selection on buttons for a native app feel */
-button {
-  user-select: none;
-  -webkit-user-select: none;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 900;
+  font-size: 20px;
+}
+
+.brand span {
+  color: var(--primary);
+}
+
+.profile-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #e0e7ff, #f8fafc);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  background: var(--primary);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-weight: 800;
+}
+
+/* =========================
+   CONTENT AREA
+========================= */
+main {
+  flex: 1;
+  padding: 20px;
+  padding-bottom: 100px;
+}
+
+/* =========================
+   BOTTOM NAV
+========================= */
+.bottom-nav {
+  height: 75px;
+  background: #fff;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  z-index: 200;
+}
+
+.bottom-nav button {
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.bottom-nav button.active {
+  color: var(--primary);
+}
+
+.bottom-nav .scan {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 20px;
+  transform: translateY(-20%);
+  box-shadow: var(--shadow-md);
+}
+
+/* =========================
+   CARDS
+========================= */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 16px;
+}
+
+.card.glass {
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(12px);
+}
+
+/* =========================
+   DASHBOARD STATS
+========================= */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.stat {
+  padding: 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #ffffff, #f1f5f9);
+  box-shadow: var(--shadow-sm);
+}
+
+.stat.primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+}
+
+.stat h2 {
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.stat p {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* =========================
+   SEARCH
+========================= */
+.search {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+.search input {
+  border: none;
+  outline: none;
+  flex: 1;
+  margin-left: 10px;
+  font-size: 14px;
+}
+
+/* =========================
+   LIST ITEMS
+========================= */
+.list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 12px;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.list-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* =========================
+   BADGES
+========================= */
+.badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.badge.success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge.warning {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.badge.danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* =========================
+   BUTTONS
+========================= */
+.btn {
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform .1s ease, box-shadow .1s ease;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.btn.secondary {
+  background: #f1f5f9;
+}
+
+.btn.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* =========================
+   LOGIN PAGE
+========================= */
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at top, #e0e7ff, #f8fafc);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  padding: 30px;
+  border-radius: 24px;
+  box-shadow: var(--shadow-lg);
+  animation: pop .35s ease;
+}
+
+.login-card h2 {
+  font-size: 26px;
+  font-weight: 900;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.login-card p {
+  text-align: center;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+
+/* =========================
+   SCANNER
+========================= */
+.scanner {
+  text-align: center;
+}
+
+.scanner video {
+  width: 100%;
+  border-radius: 20px;
+  box-shadow: var(--shadow-md);
+}
+
+.scanner-frame {
+  position: relative;
+}
+
+.scanner-frame::after {
+  content: '';
+  position: absolute;
+  inset: 20px;
+  border: 3px dashed rgba(255,255,255,.6);
+  border-radius: 18px;
+}
+
+/* =========================
+   ANIMATIONS
+========================= */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pop {
+  from { transform: scale(.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
