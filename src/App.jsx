@@ -4,7 +4,7 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import {
   Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
   RefreshCw, Printer, AlertCircle, Moon, Sun, UserCheck, Search,
-  TrendingUp, Calendar, Trash2, Key
+  TrendingUp, Calendar, Trash2, Key, MapPin, Phone, Hash
 } from 'lucide-react';
 
 /* ===================== CONFIGURATION ===================== */
@@ -115,16 +115,23 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, config }) => {
     <div style={styles.fadeIn}>
       <DashboardStats stats={stats} memberCount={data.members.length} colors={colors} />
       
-      <SectionHeader title="All Registered Members" icon={<Users size={20} />} />
-      <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: 20 }}>
-        {data.members.map(m => (
-          <div key={m.id} style={{ ...styles.listItem, background: colors.card, marginBottom: 4, padding: '8px 12px' }}>
-            <div style={{ flex: 1 }}>
-              <span style={{ fontWeight: '600', fontSize: 13 }}>{m.full_name}</span>
-              <div style={{ fontSize: 10, color: colors.textSecondary }}>{m.registration_no} • {m.phone_number} • ₦{m.expected_amount}/day</div>
+      <SectionHeader title="Registered Member Details" icon={<Users size={20} />} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 25 }}>
+        {data.members.length === 0 ? <EmptyState message="No members found" colors={colors} /> : 
+          data.members.map(m => (
+            <div key={m.id} style={{ ...styles.memberDetailCard, background: colors.card, borderColor: colors.border }}>
+              <div style={{ borderBottom: `1px solid ${colors.border}`, paddingBottom: 8, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong style={{ fontSize: 16, color: colors.primary }}>{m.full_name}</strong>
+                <span style={{ fontSize: 12, background: colors.primary + '22', color: colors.primary, padding: '2px 8px', borderRadius: 4 }}>₦{m.expected_amount}/day</span>
+              </div>
+              <div style={styles.detailGrid}>
+                <div style={styles.detailItem}><Hash size={12} /> {m.registration_no}</div>
+                <div style={styles.detailItem}><Phone size={12} /> {m.phone_number}</div>
+                <div style={{ ...styles.detailItem, gridColumn: 'span 2' }}><MapPin size={12} /> {m.address}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        }
       </div>
 
       <SectionHeader title="Recent Collections" icon={<TrendingUp size={20} />} />
@@ -451,6 +458,9 @@ const styles = {
   statCard: { padding: 15, borderRadius: 12, border: '1px solid', textAlign: 'center' },
   heroCard: { padding: 20, borderRadius: 15, color: '#fff' },
   listItem: { display: 'flex', alignItems: 'center', padding: 12, borderRadius: 10, border: '1px solid', marginBottom: 8, gap: 10 },
+  memberDetailCard: { padding: 15, borderRadius: 12, border: '1px solid', marginBottom: 10 },
+  detailGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
+  detailItem: { fontSize: 11, display: 'flex', alignItems: 'center', gap: 5, opacity: 0.8 },
   searchBox: { display: 'flex', alignItems: 'center', padding: '0 12px', borderRadius: 10, border: '1px solid', marginBottom: 15 },
   searchInput: { background: 'none', border: 'none', padding: '10px 5px', width: '100%', outline: 'none' },
   form: { padding: 15, borderRadius: 12, border: '1px solid', marginBottom: 15 },
