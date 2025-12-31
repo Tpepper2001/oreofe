@@ -4,7 +4,7 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import {
   Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
   RefreshCw, Printer, AlertCircle, Moon, Sun, UserCheck, Search,
-  TrendingUp, Calendar
+  TrendingUp, Calendar, Trash2, Key
 } from 'lucide-react';
 
 /* ===================== CONFIGURATION ===================== */
@@ -114,6 +114,19 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, config }) => {
   if (view === 'dashboard') return (
     <div style={styles.fadeIn}>
       <DashboardStats stats={stats} memberCount={data.members.length} colors={colors} />
+      
+      <SectionHeader title="All Registered Members" icon={<Users size={20} />} />
+      <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: 20 }}>
+        {data.members.map(m => (
+          <div key={m.id} style={{ ...styles.listItem, background: colors.card, marginBottom: 4, padding: '8px 12px' }}>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontWeight: '600', fontSize: 13 }}>{m.full_name}</span>
+              <div style={{ fontSize: 10, color: colors.textSecondary }}>{m.registration_no} • {m.phone_number} • ₦{m.expected_amount}/day</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       <SectionHeader title="Recent Collections" icon={<TrendingUp size={20} />} />
       <TransactionList transactions={data.transactions.slice(0, 15)} colors={colors} />
     </div>
@@ -143,7 +156,7 @@ const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, config
   return null;
 };
 
-/* ===================== SCANNER & PAYMENT (GPS FULLY REMOVED) ===================== */
+/* ===================== SCANNER & PAYMENT ===================== */
 const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
@@ -162,8 +175,6 @@ const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
 
   const handleSubmitPayment = async () => {
     if (!amount || Number(amount) <= 0) return;
-
-    // NO GPS DATA SENT HERE
     const { error } = await supabase.from('transactions').insert([{
       contributor_id: selectedMember.id,
       full_name: selectedMember.full_name,
@@ -335,6 +346,20 @@ const SearchBar = ({ value, onChange, placeholder, colors }) => (
 const AgentManagement = ({ agents, transactions, onRefresh, showToast, colors }) => {
   const [showAdd, setShowAdd] = useState(false);
   const stats = agents.map(a => ({ ...a, total: transactions.filter(t => t.employee_id === a.id).reduce((s, t) => s + (t.amount || 0), 0) }));
+
+  const handleDelete = async (id) => {
+    if(!confirm("Are you sure you want to delete this agent?")) return;
+    const { error } = await supabase.from('employees').delete().eq('id', id);
+    if(error) showToast(error.message, "error"); else { showToast("Agent deleted", "success"); onRefresh(); }
+  };
+
+  const handleEditPassword = async (id) => {
+    const newPass = prompt("Enter new password for this agent:");
+    if(!newPass) return;
+    const { error } = await supabase.from('employees').update({ password: newPass }).eq('id', id);
+    if(error) showToast(error.message, "error"); else showToast("Password updated", "success");
+  };
+
   return (
     <div>
       <button onClick={() => setShowAdd(true)} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15 }}>+ New Agent</button>
@@ -345,11 +370,22 @@ const AgentManagement = ({ agents, transactions, onRefresh, showToast, colors })
         setShowAdd(false); onRefresh();
       }}>
         <input name="n" placeholder="Name" style={styles.input} required />
-        <input name="id" placeholder="ID" style={styles.input} required />
+        <input name="id" placeholder="ID (Username)" style={styles.input} required />
         <input name="p" placeholder="Pass" style={styles.input} required />
         <button type="submit" style={{ ...styles.btnPrimary, background: colors.primary }}>Save</button>
       </form></div>}
-      {stats.map(a => <div key={a.id} style={styles.listItem}><div><strong>{a.full_name}</strong><br/>₦{a.total.toLocaleString()}</div></div>)}
+      {stats.map(a => (
+        <div key={a.id} style={{...styles.listItem, background: colors.card}}>
+          <div style={{ flex: 1 }}>
+            <strong>{a.full_name}</strong> (ID: {a.employee_id_number})<br/>
+            <small style={{color: colors.primary}}>Total: ₦{a.total.toLocaleString()}</small>
+          </div>
+          <div style={{ display: 'flex', gap: 5 }}>
+            <button onClick={() => handleEditPassword(a.id)} style={{...styles.iconBtn, color: colors.primary}} title="Change Password"><Key size={18} /></button>
+            <button onClick={() => handleDelete(a.id)} style={{...styles.iconBtn, color: '#ef4444'}} title="Delete Agent"><Trash2 size={18} /></button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 };
