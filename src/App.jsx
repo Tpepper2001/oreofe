@@ -1,534 +1,939 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Scanner } from '@yudiel/react-qr-scanner';
 import {
-  Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
-  RefreshCw, Printer, AlertCircle, Moon, Sun, UserCheck, Search,
-  TrendingUp, Calendar, Trash2, Key, MapPin, Phone, Hash, CheckCircle2,
-  WifiOff, User, CreditCard, ChevronRight, Info, Download, Edit3, Save
+  Document, Page, Text, View, StyleSheet, PDFViewer, Image as PDFImage, PDFDownloadLink
+} from '@react-pdf/renderer';
+import {
+  LayoutDashboard, LogOut, Loader2, Plus, School, User, Download,
+  X, Eye, Trash2, ShieldCheck, Save, Menu, Upload, Users, Key, Copy, UserPlus
 } from 'lucide-react';
 
-/* ===================== CONFIGURATION ===================== */
-const CONFIG = {
-  supabase: {
-    url: 'https://watrosnylvkiuvuptdtp.supabase.co',
-    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdHJvc255bHZraXV2dXB0ZHRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5MzE2NzEsImV4cCI6MjA4MjUwNzY3MX0.ku6_Ngf2JRJ8fxLs_Q-EySgCU37MjUK3WofpO9bazds'
-  },
-  business: {
-    name: "ORE-OFE OLUWA",
-    address: "No. 1, Bisiriyu Owokade Street, Molete, Lagos.",
-    phones: "08107218385, 08027203601",
-    commissionRate: 0.05
-  },
-  admin: { username: 'oreofe', password: 'oreofe' }
+// ==================== SUPABASE CONFIG ====================
+const supabaseUrl = 'https://xtciiatfetqecsfxoicq.supabase.co'; 
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0Y2lpYXRmZXRxZWNzZnhvaWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDEyMDIsImV4cCI6MjA4MDYxNzIwMn0.81K9w-XbCHWRWmKkq3rcJHxslx3hs5mGCSNIvyJRMuw'; 
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// ==================== CONSTANTS & HELPERS ====================
+const BEHAVIORAL_TRAITS = [
+  'COOPERATION', 'LEADERSHIP', 'HONESTY', 'SELF DISCIPLINE',
+  'RESPECT', 'RESPONSIBILITY', 'EMPATHY', 'PUNCTUALITY', 'NEATNESS', 'INITIATIVE'
+];
+const RATINGS = ['Excellent', 'Very Good', 'Good', 'Fair', 'Poor'];
+
+const isExamField = (str) => {
+    if (!str) return false;
+    const s = str.toLowerCase();
+    return s.includes('exam') || s.includes('examination');
 };
 
-const supabase = createClient(CONFIG.supabase.url, CONFIG.supabase.key);
-
-/* ===================== UTILS ===================== */
-const exportToCSV = (filename, data) => {
-  if (!data || !data.length) return;
-  const headers = Object.keys(data[0]).join(',');
-  const rows = data.map(row => 
-    Object.values(row).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
-  );
-  const csv = [headers, ...rows].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
+const calculateGrade = (obtained, maxPossible) => {
+  if (!maxPossible || maxPossible === 0) return { grade: '-', remark: '-' };
+  const percentage = (obtained / maxPossible) * 100;
+  if (percentage >= 86) return { grade: 'A*', remark: 'Distinction' };
+  if (percentage >= 76) return { grade: 'A', remark: 'Excellent' };
+  if (percentage >= 66) return { grade: 'B', remark: 'Very Good' };
+  if (percentage >= 60) return { grade: 'C', remark: 'Good' };
+  if (percentage >= 50) return { grade: 'D', remark: 'Fairly Good' };
+  if (percentage >= 40) return { grade: 'E', remark: 'Pass' };
+  return { grade: 'F', remark: 'Fail' };
 };
 
-const useCountUp = (end, duration = 1000) => {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    let start = 0;
-    const increment = end / (duration / 16);
-    const timer = setInterval(() => {
-      start += increment;
-      if (start >= end) { setCount(end); clearInterval(timer); } 
-      else { setCount(Math.floor(start)); }
-    }, 16);
-    return () => clearInterval(timer);
-  }, [end, duration]);
-  return count;
+const generatePIN = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+const generateAdmissionNumber = () => {
+    const year = new Date().getFullYear();
+    const random = Math.floor(1000 + Math.random() * 9000); 
+    return `${year}/${random}`;
 };
 
-/* ===================== MAIN APP ===================== */
-export default function App() {
-  const [auth, setAuth] = useState(null);
-  const [view, setView] = useState('dashboard');
-  const [data, setData] = useState({ members: [], agents: [], transactions: [] });
-  const [loading, setLoading] = useState(false);
-  const [theme, setTheme] = useState('dark');
-  const [toasts, setToasts] = useState([]);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [modal, setModal] = useState({ show: false, title: '', msg: '', onConfirm: null, isPrompt: false });
-
-  const showToast = useCallback((message, type = 'info') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
-  }, []);
-
-  const confirmAction = (title, msg, onConfirm, isPrompt = false) => {
-    setModal({ show: true, title, msg, onConfirm, isPrompt });
-  };
-
-  const fetchData = useCallback(async () => {
-    if (!auth) return;
-    setLoading(true);
+const imageUrlToBase64 = async (url) => {
+    if (!url) return null;
     try {
-      const [m, t, e] = await Promise.all([
-        supabase.from('contributors').select('*').order('full_name'),
-        supabase.from('transactions').select('*').order('created_at', { ascending: false }),
-        supabase.from('employees').select('*').order('full_name')
-      ]);
-      setData({ members: m.data || [], transactions: t.data || [], agents: e.data || [] });
-    } catch (e) { showToast("Fetch failed", "error"); }
-    finally { setLoading(false); }
-  }, [auth, showToast]);
-
-  useEffect(() => { if (auth) fetchData(); }, [auth, fetchData]);
-  useEffect(() => {
-    const hO = () => setIsOnline(true); const hF = () => setIsOnline(false);
-    window.addEventListener('online', hO); window.addEventListener('offline', hF);
-    return () => { window.removeEventListener('online', hO); window.removeEventListener('offline', hF); };
-  }, []);
-
-  const handleLogin = async (creds) => {
-    setLoading(true);
-    const u = creds.username.trim().toLowerCase();
-    if (u === CONFIG.admin.username && creds.password === CONFIG.admin.password) {
-      setAuth({ id: 'admin', role: 'admin', name: 'Admin' });
-      setLoading(false); return;
+        const response = await fetch(url + '?t=' + new Date().getTime());
+        const blob = await response.blob();
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+        });
+    } catch (e) {
+        console.error("Image convert error:", e);
+        return null;
     }
-    const { data: agent } = await supabase.from('employees').select('*').eq('employee_id_number', u).eq('password', creds.password).single();
-    if (agent) setAuth({ id: agent.id, role: 'agent', name: agent.full_name, data: agent });
-    else showToast("Invalid login", "error");
+};
+
+const useAutoSave = (callback, delay = 2000) => {
+  const [saving, setSaving] = useState(false);
+  const timeoutRef = useRef(null);
+  const trigger = useCallback(() => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(async () => {
+      setSaving(true);
+      await callback();
+      setSaving(false);
+    }, delay);
+  }, [callback, delay]);
+  return { save: trigger, saving };
+};
+
+// ==================== PDF STYLES ====================
+const pdfStyles = StyleSheet.create({
+  page: { padding: 30, fontFamily: 'Helvetica', fontSize: 9, color: '#333' },
+  watermarkContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: -1 },
+  watermarkImage: { width: 400, height: 400, opacity: 0.05 },
+  headerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, borderBottomWidth: 2, borderBottomColor: '#0f172a', paddingBottom: 10 },
+  logoBox: { width: 70, height: 70, marginRight: 15, justifyContent: 'center', alignItems: 'center' },
+  logo: { width: '100%', height: '100%', objectFit: 'contain' },
+  headerTextBox: { flex: 1 },
+  schoolName: { fontSize: 22, fontFamily: 'Helvetica-Bold', color: '#0f172a', textTransform: 'uppercase', marginBottom: 4 },
+  schoolAddress: { fontSize: 9, color: '#444', marginBottom: 2 },
+  contactRow: { fontSize: 9, color: '#444', fontStyle: 'italic' },
+  reportTitleBox: { alignItems: 'center', marginBottom: 15, paddingVertical: 6, backgroundColor: '#f1f5f9', borderRadius: 2 },
+  reportTitle: { fontSize: 12, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', color: '#0f172a' },
+  infoContainer: { marginBottom: 15, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4 },
+  infoRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f1f5f9', padding: 6 },
+  infoCol: { flex: 1 },
+  infoLabel: { fontSize: 7, color: '#64748b', textTransform: 'uppercase', marginBottom: 2 },
+  infoValue: { fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#0f172a' },
+  table: { width: '100%', marginBottom: 15, borderWidth: 1, borderColor: '#e2e8f0' },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#0f172a', paddingVertical: 6, alignItems: 'center' },
+  headerText: { color: 'white', fontSize: 8, fontWeight: 'bold' },
+  tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', minHeight: 22, alignItems: 'center' },
+  cell: { padding: 4, fontSize: 9 },
+  colSN: { width: '6%', textAlign: 'center' }, 
+  colSubject: { width: '30%' }, 
+  colTotal: { width: '10%', fontFamily: 'Helvetica-Bold', textAlign: 'center' }, 
+  colGrade: { width: '10%', textAlign: 'center' },
+  colRemark: { width: '15%', textAlign: 'left', fontSize: 8 },
+  footerContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30 },
+  signatureBox: { width: '40%', alignItems: 'center', paddingTop: 5, borderTopWidth: 1, borderTopColor: '#94a3b8', height: 60, justifyContent: 'flex-end' },
+  signatureImage: { height: 40, width: 100, objectFit: 'contain', marginBottom: 2 },
+  signatureText: { fontSize: 8, color: '#64748b', textTransform: 'uppercase' }
+});
+
+const ResultPDF = ({ school, student, results, classInfo, comments, behaviors = [], reportType = 'full', logoBase64, principalSigBase64, teacherSigBase64 }) => {
+  const isMidTerm = reportType === 'mid';
+  const config = school.assessment_config || [];
+  const displayFields = isMidTerm ? config.filter(f => !isExamField(f.code) && !isExamField(f.name)) : config;
+  const maxPossibleScore = displayFields.reduce((sum, f) => sum + parseInt(f.max), 0);
+  const fixedWidths = 6 + 30 + 10 + 10 + 15; 
+  const remainingWidth = 100 - fixedWidths;
+  const scoreColWidth = displayFields.length > 0 ? `${remainingWidth / displayFields.length}%` : '0%';
+  const processedResults = results.map(r => {
+    const rawScores = r.scores || {};
+    let total = 0;
+    displayFields.forEach(f => total += (parseFloat(rawScores[f.code]) || 0));
+    const { grade, remark } = calculateGrade(total, maxPossibleScore);
+    return { ...r, scores: rawScores, total, grade, remark };
+  });
+  const totalScore = processedResults.reduce((acc, r) => acc + r.total, 0);
+  const average = ((totalScore / (results.length * maxPossibleScore)) * 100).toFixed(1);
+  const behaviorMap = Object.fromEntries(behaviors.map(b => [b.trait, b.rating]));
+  const teacherComment = isMidTerm ? (comments?.midterm_tutor_comment || "No mid-term comment.") : (comments?.tutor_comment || "No comment.");
+
+  return (
+    <Document>
+      <Page size="A4" style={pdfStyles.page}>
+        {logoBase64 && <View style={pdfStyles.watermarkContainer}><PDFImage src={logoBase64} style={pdfStyles.watermarkImage} /></View>}
+        <View style={pdfStyles.headerContainer}>
+          <View style={pdfStyles.logoBox}>{logoBase64 ? <PDFImage src={logoBase64} style={pdfStyles.logo} /> : null}</View>
+          <View style={pdfStyles.headerTextBox}>
+            <Text style={pdfStyles.schoolName}>{school?.name || 'SCHOOL NAME'}</Text>
+            {school?.address && <Text style={pdfStyles.schoolAddress}>{school.address}</Text>}
+            <Text style={pdfStyles.contactRow}>{school?.email || ''} {school?.email && school?.contact ? '|' : ''} {school?.contact || ''}</Text>
+          </View>
+        </View>
+        <View style={pdfStyles.reportTitleBox}>
+            <Text style={pdfStyles.reportTitle}>{isMidTerm ? 'MID-TERM CONTINUOUS ASSESSMENT' : 'END OF TERM REPORT'} - {school?.current_term?.toUpperCase()}</Text>
+            <Text style={{fontSize: 9, color: '#64748b', marginTop: 2}}>{school?.current_session} SESSION</Text>
+        </View>
+        <View style={pdfStyles.infoContainer}>
+            <View style={pdfStyles.infoRow}>
+                <View style={pdfStyles.infoCol}><Text style={pdfStyles.infoLabel}>Student Name</Text><Text style={pdfStyles.infoValue}>{student.name}</Text></View>
+                <View style={pdfStyles.infoCol}><Text style={pdfStyles.infoLabel}>Admission No</Text><Text style={pdfStyles.infoValue}>{student.admission_no}</Text></View>
+                <View style={pdfStyles.infoCol}><Text style={pdfStyles.infoLabel}>Class</Text><Text style={pdfStyles.infoValue}>{classInfo?.name}</Text></View>
+            </View>
+            <View style={[pdfStyles.infoRow, {borderBottomWidth: 0}]}>
+                <View style={pdfStyles.infoCol}><Text style={pdfStyles.infoLabel}>Gender</Text><Text style={pdfStyles.infoValue}>{student.gender}</Text></View>
+                <View style={pdfStyles.infoCol}><Text style={pdfStyles.infoLabel}>Total Obtained</Text><Text style={pdfStyles.infoValue}>{totalScore} / {results.length * maxPossibleScore}</Text></View>
+                <View style={pdfStyles.infoCol}><Text style={pdfStyles.infoLabel}>Percentage</Text><Text style={pdfStyles.infoValue}>{isNaN(average) ? '0.0' : average}%</Text></View>
+            </View>
+        </View>
+        <View style={pdfStyles.table}>
+          <View style={pdfStyles.tableHeader}>
+            <Text style={[pdfStyles.cell, pdfStyles.colSN, pdfStyles.headerText]}>S/N</Text>
+            <Text style={[pdfStyles.cell, pdfStyles.colSubject, pdfStyles.headerText]}>SUBJECT</Text>
+            {displayFields.map(f => <Text key={f.code} style={[pdfStyles.cell, {width: scoreColWidth, textAlign: 'center'}, pdfStyles.headerText]}>{f.name.toUpperCase()}</Text>)}
+            <Text style={[pdfStyles.cell, pdfStyles.colTotal, pdfStyles.headerText]}>TOT</Text>
+            <Text style={[pdfStyles.cell, pdfStyles.colGrade, pdfStyles.headerText]}>GRD</Text>
+            <Text style={[pdfStyles.cell, pdfStyles.colRemark, pdfStyles.headerText]}>REMARK</Text>
+          </View>
+          {processedResults.map((r, i) => (
+            <View key={i} style={[pdfStyles.tableRow, { backgroundColor: i % 2 === 0 ? '#fff' : '#f8fafc' }]}>
+              <Text style={[pdfStyles.cell, pdfStyles.colSN]}>{i + 1}</Text>
+              <Text style={[pdfStyles.cell, pdfStyles.colSubject]}>{r.subjects?.name}</Text>
+              {displayFields.map(f => <Text key={f.code} style={[pdfStyles.cell, {width: scoreColWidth, textAlign: 'center'}]}>{r.scores[f.code] || 0}</Text>)}
+              <Text style={[pdfStyles.cell, pdfStyles.colTotal]}>{r.total}</Text>
+              <Text style={[pdfStyles.cell, pdfStyles.colGrade]}>{r.grade}</Text>
+              <Text style={[pdfStyles.cell, pdfStyles.colRemark]}>{r.remark}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row', gap: 15 }}>
+            <View style={{ flex: 1, border: '1pt solid #e2e8f0', padding: 8 }}>
+                <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', marginBottom: 5 }}>BEHAVIOURAL TRAITS</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                    {BEHAVIORAL_TRAITS.map(t => (<View key={t} style={{ width: '50%', marginBottom: 3 }}><Text style={{ fontSize: 7, color: '#64748b' }}>{t}</Text><Text style={{ fontSize: 8 }}>{behaviorMap[t] || 'Good'}</Text></View>))}
+                </View>
+            </View>
+            <View style={{ flex: 1 }}>
+                <View style={{ marginBottom: 10, border: '1pt solid #e2e8f0', padding: 8 }}>
+                    <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold' }}>CLASS TUTOR'S REMARK</Text>
+                    <Text style={{ fontSize: 8, fontStyle: 'italic', marginTop: 3 }}>{teacherComment}</Text>
+                </View>
+                {!isMidTerm && (
+                <View style={{ border: '1pt solid #e2e8f0', padding: 8 }}>
+                    <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold' }}>PRINCIPAL'S REMARK</Text>
+                    <Text style={{ fontSize: 8, fontStyle: 'italic', marginTop: 3 }}>{comments?.principal_comment || 'Result Verified and Approved.'}</Text>
+                </View>
+                )}
+            </View>
+        </View>
+        <View style={pdfStyles.footerContainer}>
+            <View style={pdfStyles.signatureBox}>
+                {teacherSigBase64 ? <PDFImage src={teacherSigBase64} style={pdfStyles.signatureImage} /> : null}
+                <Text style={pdfStyles.signatureText}>Class Tutor Signature</Text>
+            </View>
+            {!isMidTerm && (
+            <View style={pdfStyles.signatureBox}>
+                {principalSigBase64 ? <PDFImage src={principalSigBase64} style={pdfStyles.signatureImage} /> : null}
+                <Text style={pdfStyles.signatureText}>Principal Signature</Text>
+            </View>
+            )}
+        </View>
+      </Page>
+    </Document>
+  );
+};
+
+// ==================== SCHOOL ADMIN COMPONENT ====================
+const SchoolAdmin = ({ profile, onLogout }) => {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [school, setSchool] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [students, setStudents] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [admins, setAdmins] = useState([]);
+  const [viewingStudent, setViewingStudent] = useState(null);
+  const [reportType, setReportType] = useState('full');
+  const [previewData, setPreviewData] = useState(null);
+  const [newConfig, setNewConfig] = useState({ name: '', max: 10, code: '' });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => { fetchSchoolData(); }, [profile]);
+
+  const fetchSchoolData = async () => {
+    setLoading(true);
+    const { data: s } = await supabase.from('schools').select('*').eq('owner_id', profile.id).single();
+    if(!s && profile.school_id) {
+       const { data: subS } = await supabase.from('schools').select('*').eq('id', profile.school_id).single();
+       setSchool(subS);
+       if(subS) await loadRelated(subS.id);
+    } else {
+       setSchool(s);
+       if(s) await loadRelated(s.id);
+    }
     setLoading(false);
   };
 
-  const isDark = theme === 'dark';
-  const colors = isDark ? DARK_THEME : LIGHT_THEME;
+  const loadRelated = async (schoolId) => {
+      const { data: cls } = await supabase.from('classes').select('*, profiles(full_name)').eq('school_id', schoolId);
+      setClasses(cls || []);
+      const { data: stu } = await supabase.from('students').select('*, classes(name, form_tutor_id, profiles(signature_url)), comments(submission_status)').eq('school_id', schoolId).order('name');
+      setStudents(stu || []);
+      const { data: tch } = await supabase.from('profiles').select('*').eq('school_id', schoolId).eq('role', 'teacher');
+      setTeachers(tch || []);
+      const { data: adm } = await supabase.from('profiles').select('*').eq('school_id', schoolId).eq('role', 'admin');
+      setAdmins(adm || []);
+  };
 
-  if (!auth) return <LoginScreen onLogin={handleLogin} loading={loading} theme={theme} />;
+  const inviteAdmin = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const email = fd.get('email');
+      const name = fd.get('name');
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const currentInvites = school.admin_invites || [];
+      const newInvite = { email, name, code, created_at: new Date().toISOString() };
+      const updatedInvites = [...currentInvites, newInvite];
+      const { error } = await supabase.from('schools').update({ admin_invites: updatedInvites }).eq('id', school.id);
+      if(!error) {
+          window.alert(`Invite Created! Code: ${code}\nShare this code with the user.`);
+          e.target.reset();
+          fetchSchoolData();
+      } else {
+          window.alert("Error: " + error.message);
+      }
+  };
 
-  return (
-    <div style={{ ...styles.app, background: colors.bg, color: colors.text }}>
-      {!isOnline && <div style={styles.offlineBanner}><WifiOff size={14} /> Offline Mode</div>}
-      <Header business={CONFIG.business.name} role={auth.role} isDark={isDark} onToggleTheme={() => setTheme(isDark ? 'light' : 'dark')} colors={colors} />
-      
-      <main style={styles.main}>
-        {loading ? <SkeletonLoader /> : (
-          <>
-            {auth.role === 'admin' && <AdminPortal view={view} data={data} onRefresh={fetchData} showToast={showToast} colors={colors} config={CONFIG.business} confirmAction={confirmAction} />}
-            {auth.role === 'agent' && <AgentPortal view={view} profile={auth.data} data={data} onRefresh={fetchData} showToast={showToast} colors={colors} config={CONFIG.business} />}
-          </>
-        )}
-      </main>
-
-      <Navigation view={view} role={auth.role} onNavigate={setView} onLogout={() => confirmAction("Logout", "Exit application?", () => setAuth(null))} colors={colors} />
-      <ToastContainer toasts={toasts} />
-      {modal.show && <ConfirmationModal modal={modal} onClose={() => setModal({ ...modal, show: false })} colors={colors} />}
-    </div>
-  );
-}
-
-/* ===================== COMPONENTS ===================== */
-
-const AdminPortal = ({ view, data, onRefresh, showToast, colors, config, confirmAction }) => {
-  const stats = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const todayTs = data.transactions.filter(t => t.created_at.startsWith(today));
-    return { 
-      todayRev: todayTs.reduce((s, t) => s + (t.amount || 0), 0), 
-      totalRev: data.transactions.reduce((s, t) => s + (t.amount || 0), 0)
+  const updateSchool = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const formData = new FormData(e.target);
+    const file = formData.get('logo_file');
+    let logo_url = school.logo_url;
+    if (file && file.size > 0) {
+        const fileName = `logo-${school.id}-${Date.now()}.${file.name.split('.').pop()}`;
+        const { error } = await supabase.storage.from('school-assets').upload(fileName, file);
+        if (!error) {
+            const { data } = supabase.storage.from('school-assets').getPublicUrl(fileName);
+            logo_url = data.publicUrl;
+        }
+    }
+    const updates = {
+        name: formData.get('name'), address: formData.get('address'),
+        contact: formData.get('contact'), email: formData.get('email'),
+        current_term: formData.get('current_term'), current_session: formData.get('current_session'),
+        logo_url
     };
-  }, [data.transactions]);
+    await supabase.from('schools').update(updates).eq('id', school.id);
+    setSchool(prev => ({ ...prev, ...updates }));
+    window.alert('School Info Updated!');
+    setLoading(false);
+  };
 
-  if (view === 'dashboard') return (
-    <div style={styles.fadeIn}>
-      <div style={styles.exportBar}>
-        <button onClick={() => exportToCSV('Transactions', data.transactions)} style={{...styles.btnGhost, color: colors.primary}}><Download size={16}/> Transactions</button>
-        <button onClick={() => exportToCSV('Members', data.members)} style={{...styles.btnGhost, color: colors.primary}}><Download size={16}/> Members</button>
-      </div>
-      <DashboardStats stats={stats} memberCount={data.members.length} colors={colors} />
-      <SectionHeader title="Recent Collections" icon={<TrendingUp size={20} />} />
-      <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} />
-    </div>
-  );
-  if (view === 'members') return <MemberManagement members={data.members} onRefresh={onRefresh} showToast={showToast} colors={colors} config={config} isAdmin={true} confirmAction={confirmAction} />;
-  if (view === 'agents') return <AgentManagement agents={data.agents} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} confirmAction={confirmAction} />;
-  return null;
-};
+  const addConfigField = async () => {
+    if(!newConfig.name || !newConfig.max) return;
+    const code = newConfig.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const updated = [...(school.assessment_config || []), { ...newConfig, code }];
+    await supabase.from('schools').update({ assessment_config: updated }).eq('id', school.id);
+    setNewConfig({ name: '', max: 10, code: '' });
+    fetchSchoolData();
+  };
 
-const MemberManagement = ({ members, onRefresh, showToast, colors, config, isAdmin, confirmAction }) => {
-  const [search, setSearch] = useState('');
-  const [form, setForm] = useState({ show: false, member: null });
-  const filtered = members.filter(m => m.full_name.toLowerCase().includes(search.toLowerCase()) || m.registration_no.includes(search));
+  const loadStudentResult = async (student, type) => {
+    setViewingStudent(student);
+    setReportType(type);
+    const { data: results } = await supabase.from('results').select('*, subjects(*)').eq('student_id', student.id);
+    const { data: comments } = await supabase.from('comments').select('*').eq('student_id', student.id).maybeSingle();
+    const behaviorList = comments?.behaviors ? JSON.parse(comments.behaviors) : {};
+    const behaviorArray = BEHAVIORAL_TRAITS.map(trait => ({ trait, rating: behaviorList[trait] || 'Good' }));
+    const logoBase64 = await imageUrlToBase64(school.logo_url);
+    const principalSigBase64 = await imageUrlToBase64(school.principal_signature_url);
+    const teacherSigBase64 = await imageUrlToBase64(student.classes?.profiles?.signature_url);
+
+    setPreviewData({ 
+        school, student, classInfo: student.classes, 
+        results: results || [], comments: comments || {}, behaviors: behaviorArray, 
+        logoBase64, principalSigBase64, teacherSigBase64 
+    });
+  };
+
+  if (viewingStudent && previewData) {
+    return (
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-100 h-screen w-screen">
+            <div className="bg-white p-4 shadow flex justify-between items-center z-10">
+                <button onClick={() => setViewingStudent(null)} className="flex items-center gap-2"><X /> Close</button>
+                <div className="flex gap-3">
+                    <PDFDownloadLink document={<ResultPDF {...previewData} reportType={reportType} logoBase64={previewData.logoBase64} principalSigBase64={previewData.principalSigBase64} teacherSigBase64={previewData.teacherSigBase64} />} fileName={`${viewingStudent.name}.pdf`}>
+                      <button className="bg-blue-600 text-white px-3 py-2 rounded flex items-center gap-2 text-sm font-bold"><Download size={16} /> PDF</button>
+                    </PDFDownloadLink>
+                </div>
+            </div>
+            <div className="flex-1 w-full relative">
+                 <PDFViewer className="absolute inset-0 w-full h-full"><ResultPDF {...previewData} reportType={reportType} logoBase64={previewData.logoBase64} principalSigBase64={previewData.principalSigBase64} teacherSigBase64={previewData.teacherSigBase64} /></PDFViewer>
+            </div>
+        </div>
+    )
+  }
 
   return (
-    <div style={styles.fadeIn}>
-      <SearchBar value={search} onChange={setSearch} placeholder="Search names or IDs..." colors={colors} />
-      {isAdmin && <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15 }}><UserPlus size={18} /> New Member</button>}
-      
-      {form.show && (
-        <MemberForm 
-          member={form.member} 
-          onClose={() => setForm({ show: false, member: null })} 
-          onSuccess={() => { setForm({ show: false, member: null }); onRefresh(); }} 
-          showToast={showToast} colors={colors} 
-        />
-      )}
+    <div className="min-h-screen bg-gray-100 flex font-sans flex-col md:flex-row">
+      {/* Mobile Header */}
+      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md z-20 sticky top-0">
+          <h2 className="font-bold flex items-center gap-2"><School size={20}/> Admin</h2>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)}><Menu /></button>
+      </div>
 
-      <div style={styles.list}>
-        {filtered.map(m => (
-          <div key={m.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-            <div style={styles.avatar}>{m.full_name[0]}</div>
-            <div style={{ flex: 1 }}>
-              <strong>{m.full_name}</strong>
-              <div style={styles.subtext}>ID: {m.registration_no} • ₦{m.expected_amount}/day</div>
+      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed md:relative z-10 inset-y-0 left-0 w-64 bg-slate-900 text-white flex flex-col p-4 transition duration-200 ease-in-out`}>
+        <div className="hidden md:flex items-center gap-2 font-bold text-xl mb-8"><School /> Admin Panel</div>
+        <nav className="space-y-2 flex-1 mt-4 md:mt-0">
+          {['dashboard', 'info', 'admins', 'students', 'classes'].map(t => (
+              <button key={t} onClick={()=>{setActiveTab(t); setSidebarOpen(false);}} className={`w-full text-left p-3 rounded capitalize flex gap-2 ${activeTab===t?'bg-blue-600':''}`}>
+                  {t === 'dashboard' ? <LayoutDashboard size={18}/> : t==='admins' ? <Key size={18}/> : t==='students'?<User size={18}/> : <Menu size={18}/>} {t}
+              </button>
+          ))}
+        </nav>
+        <button onClick={onLogout} className="flex items-center gap-2 text-red-400 mt-auto mb-4 md:mb-0"><LogOut size={18}/> Logout</button>
+      </div>
+
+      <div className="flex-1 p-4 md:p-8 overflow-y-auto">
+        {activeTab === 'dashboard' && (
+           <div>
+               <h1 className="text-xl md:text-2xl font-bold mb-6 text-slate-800">Welcome, {school?.name}</h1>
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                   <div className="bg-white p-6 rounded shadow border-l-4 border-blue-500"><h3>Students</h3><p className="text-3xl font-bold text-slate-700">{students.length}</p></div>
+                   <div className="bg-white p-6 rounded shadow border-l-4 border-green-500"><h3>Teachers</h3><p className="text-3xl font-bold text-slate-700">{teachers.length}</p></div>
+                   <div className="bg-white p-6 rounded shadow border-l-4 border-purple-500"><h3>Admins</h3><p className="text-3xl font-bold text-slate-700">{admins.length}</p></div>
+               </div>
+           </div>
+        )}
+
+        {activeTab === 'admins' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="bg-white p-6 rounded shadow">
+                    <h2 className="text-xl font-bold mb-4">Manage Admins</h2>
+                    <form onSubmit={inviteAdmin} className="space-y-4">
+                        <input name="name" placeholder="Name" className="w-full p-2 border rounded" required />
+                        <input name="email" type="email" placeholder="Email" className="w-full p-2 border rounded" required />
+                        <button className="bg-blue-600 text-white w-full py-2 rounded font-bold">Generate Code</button>
+                    </form>
+                    <div className="mt-8">
+                        <h3 className="font-bold border-b pb-2 mb-2">Pending Invites</h3>
+                        {(school?.admin_invites || []).map((inv, i) => (
+                             <div key={i} className="flex justify-between items-center bg-yellow-50 p-2 mb-2 rounded border">
+                                 <div><p className="text-xs font-bold">{inv.name}</p><p className="text-xs">{inv.email}</p></div>
+                                 <p className="text-lg font-mono font-bold text-blue-600">{inv.code}</p>
+                             </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded shadow">
+                    <h3 className="font-bold mb-4">Current Admins</h3>
+                    {admins.map(a => (<div key={a.id} className="p-2 border-b flex justify-between"><span>{a.full_name}</span><User size={14}/></div>))}
+                </div>
             </div>
-            <div style={{ display: 'flex', gap: 5 }}>
-              <button onClick={() => setForm({ show: true, member: m })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
-              <button onClick={() => confirmAction("Print", "Generate card?", () => window.print())} style={{ ...styles.iconBtn, color: colors.primary }}><Printer size={18} /></button>
+        )}
+
+        {activeTab === 'info' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="bg-white p-6 rounded shadow">
+                    <div className="bg-blue-50 p-4 rounded mb-6 border border-blue-200">
+                        <h3 className="text-xs font-bold text-blue-800 uppercase">School ID (For Teachers)</h3>
+                        <div className="flex items-center gap-2 mt-2">
+                            <code className="bg-white px-2 py-1 rounded border font-mono font-bold flex-1">{school?.id}</code>
+                            <button onClick={() => {navigator.clipboard.writeText(school.id); alert('Copied!');}} className="bg-blue-600 text-white p-2 rounded"><Copy size={16}/></button>
+                        </div>
+                    </div>
+                    <form onSubmit={updateSchool} className="space-y-4">
+                        <input name="name" defaultValue={school?.name} placeholder="School Name" className="w-full p-2 border rounded" />
+                        <input name="address" defaultValue={school?.address} placeholder="Address" className="w-full p-2 border rounded" />
+                        <div className="grid grid-cols-2 gap-4">
+                            <input name="current_term" defaultValue={school?.current_term} placeholder="Term" className="w-full p-2 border rounded" />
+                            <input name="current_session" defaultValue={school?.current_session} placeholder="Session" className="w-full p-2 border rounded" />
+                        </div>
+                        <input type="file" name="logo_file" className="text-xs" />
+                        <button className="bg-blue-600 text-white w-full py-2 rounded font-bold">Save Changes</button>
+                    </form>
+                </div>
+                <div className="bg-white p-6 rounded shadow">
+                    <h3 className="font-bold mb-4">Assessment Config</h3>
+                    <div className="space-y-2 mb-4">
+                        {(school?.assessment_config || []).map(c => (
+                            <div key={c.code} className="flex justify-between bg-gray-50 p-2 rounded border text-sm">
+                                <span>{c.name} ({c.max})</span>
+                                <button onClick={async()=>{
+                                    const filtered = school.assessment_config.filter(x => x.code !== c.code);
+                                    await supabase.from('schools').update({ assessment_config: filtered }).eq('id', school.id);
+                                    fetchSchoolData();
+                                }} className="text-red-500"><Trash2 size={14}/></button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex gap-2">
+                        <input placeholder="Title" className="border p-1 rounded flex-1 text-sm" value={newConfig.name} onChange={e=>setNewConfig({...newConfig, name:e.target.value})} />
+                        <input placeholder="Max" type="number" className="border p-1 rounded w-16 text-sm" value={newConfig.max} onChange={e=>setNewConfig({...newConfig, max:parseInt(e.target.value)})} />
+                        <button onClick={addConfigField} className="bg-green-600 text-white px-2 rounded text-xs font-bold">Add</button>
+                    </div>
+                </div>
             </div>
-          </div>
-        ))}
+        )}
+
+        {activeTab === 'students' && (
+            <div className="bg-white rounded shadow overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-100 border-b">
+                        <tr><th className="p-3">Name</th><th className="p-3">Adm No</th><th className="p-3">Class</th><th className="p-3">Status</th><th className="p-3">Action</th></tr>
+                    </thead>
+                    <tbody>
+                        {students.map(s => {
+                            const status = s.comments?.[0]?.submission_status || s.comments?.submission_status || 'draft';
+                            return (
+                                <tr key={s.id} className="border-b">
+                                    <td className="p-3 font-bold">{s.name}</td>
+                                    <td className="p-3">{s.admission_no}</td>
+                                    <td className="p-3">{s.classes?.name}</td>
+                                    <td className="p-3">
+                                        {status === 'awaiting_approval' ? 
+                                            <button onClick={async()=>{await supabase.from('comments').update({submission_status:'approved'}).eq('student_id',s.id); fetchSchoolData();}} className="bg-orange-100 text-orange-600 px-2 py-1 rounded text-[10px] font-bold">Approve?</button> 
+                                            : <span className="capitalize text-xs">{status}</span>
+                                        }
+                                    </td>
+                                    <td className="p-3 flex gap-2">
+                                        <button onClick={() => loadStudentResult(s, 'full')} className="text-blue-600"><Eye size={16}/></button>
+                                        <button onClick={async()=>{if(window.confirm('Delete?')){await supabase.from('students').delete().eq('id',s.id); fetchSchoolData();}}} className="text-red-600"><Trash2 size={16}/></button>
+                                    </td>
+                                </tr>
+                            )
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        )}
+
+        {activeTab === 'classes' && (
+            <div className="bg-white p-6 rounded shadow max-w-2xl">
+                <h3 className="font-bold mb-4">Manage Classes</h3>
+                <form onSubmit={async(e)=>{
+                    e.preventDefault(); const fd=new FormData(e.target);
+                    await supabase.from('classes').insert({school_id:school.id, name:fd.get('name'), form_tutor_id:fd.get('tid')||null});
+                    e.target.reset(); fetchSchoolData();
+                }} className="flex gap-2 mb-6">
+                    <input name="name" placeholder="Class Name" className="border p-2 rounded flex-1" required />
+                    <select name="tid" className="border p-2 rounded flex-1">
+                        <option value="">Select Tutor</option>
+                        {teachers.map(t=><option key={t.id} value={t.id}>{t.full_name}</option>)}
+                    </select>
+                    <button className="bg-blue-600 text-white px-4 rounded font-bold">Create</button>
+                </form>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {classes.map(c=>(
+                        <div key={c.id} className="border p-3 rounded flex justify-between items-center bg-gray-50">
+                            <div><p className="font-bold">{c.name}</p><p className="text-[10px] text-gray-400">{c.profiles?.full_name || 'No Tutor'}</p></div>
+                            <button onClick={async()=>{if(window.confirm('Delete?')){await supabase.from('classes').delete().eq('id',c.id); fetchSchoolData();}}} className="text-red-400"><Trash2 size={14}/></button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
       </div>
     </div>
   );
 };
 
-const MemberForm = ({ member, onClose, onSuccess, showToast, colors }) => {
-  const isEdit = !!member;
-  const handleSubmit = async (e) => {
+// ==================== TEACHER DASHBOARD ====================
+const TeacherDashboard = ({ profile, onLogout }) => {
+  const [classes, setClasses] = useState([]);
+  const [curClass, setCurClass] = useState(null);
+  const [subjects, setSubjects] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [scores, setScores] = useState({});
+  const [behaviors, setBehaviors] = useState({});
+  const [comments, setComments] = useState({ full: "", mid: "" });
+  const [previewData, setPreviewData] = useState(null);
+  const [schoolConfig, setSchoolConfig] = useState([]);
+  const [schoolData, setSchoolData] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showAddStudent, setShowAddStudent] = useState(false);
+
+  const { save, saving } = useAutoSave(async () => {
+    if (!selectedStudent) return;
+    await saveResultToDB();
+  }, 1500);
+
+  useEffect(() => {
+    const init = async () => {
+        const { data: cls } = await supabase.from('classes').select('*, schools(*)').eq('form_tutor_id', profile.id);
+        setClasses(cls || []);
+        if (cls?.[0]) {
+            setSchoolConfig(cls[0].schools.assessment_config || []);
+            setSchoolData(cls[0].schools);
+            loadClass(cls[0].id);
+        }
+    };
+    init();
+  }, [profile]);
+
+  const loadClass = async (classId) => {
+    const cls = classes.find(c => c.id === classId);
+    setCurClass(cls);
+    setSelectedStudent(null);
+    setShowAddStudent(false);
+    const { data: sub } = await supabase.from('subjects').select('*').eq('class_id', classId);
+    setSubjects(sub || []);
+    const { data: stu } = await supabase.from('students').select('*, classes(profiles(signature_url))').eq('class_id', classId).order('name');
+    setStudents(stu || []);
+  };
+
+  const registerStudent = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const payload = {
-      full_name: fd.get('n'), registration_no: fd.get('r'),
-      phone_number: fd.get('p'), address: fd.get('a'),
-      expected_amount: Number(fd.get('am')), ajo_owner_id: 'admin'
+    const pin = generatePIN();
+    const adm = generateAdmissionNumber();
+    const { error } = await supabase.from('students').insert({
+        school_id: schoolData.id, class_id: curClass.id,
+        name: fd.get('name'), gender: fd.get('gender'),
+        admission_no: adm, parent_pin: pin
+    });
+    if (error) alert(error.message);
+    else { alert(`Success! PIN: ${pin}`); e.target.reset(); setShowAddStudent(false); loadClass(curClass.id); }
+  };
+
+  const loadStudentData = async (student) => {
+    setSelectedStudent(null);
+    setShowAddStudent(false);
+    const { data: res } = await supabase.from('results').select('*, subjects(*)').eq('student_id', student.id);
+    const scoreMap = {};
+    subjects.forEach(s => {
+      const existing = res?.find(r => r.subject_id === s.id);
+      scoreMap[s.id] = existing?.scores || {};
+    });
+    setScores(scoreMap);
+    const { data: comm } = await supabase.from('comments').select('*').eq('student_id', student.id).maybeSingle();
+    setComments({ full: comm?.tutor_comment || "", mid: comm?.midterm_tutor_comment || "" });
+    setBehaviors(comm?.behaviors ? JSON.parse(comm.behaviors) : {});
+    setSelectedStudent(student);
+    setSidebarOpen(false); 
+  };
+
+  const updateScore = (subId, code, value, max) => {
+    const num = Math.min(parseFloat(value) || 0, max);
+    setScores(prev => ({ ...prev, [subId]: { ...prev[subId], [code]: num } }));
+    save();
+  };
+
+  const saveResultToDB = async (status = null) => {
+    if(!selectedStudent) return;
+    const resultsPayload = subjects.map(s => {
+      const subScores = scores[s.id] || {};
+      let total = 0;
+      schoolConfig.forEach(c => total += (subScores[c.code] || 0));
+      return { student_id: selectedStudent.id, subject_id: s.id, scores: subScores, total };
+    });
+    await supabase.from('results').delete().eq('student_id', selectedStudent.id);
+    await supabase.from('results').insert(resultsPayload);
+    const payload = { 
+        student_id: selectedStudent.id, school_id: curClass.school_id, 
+        tutor_comment: comments.full, midterm_tutor_comment: comments.mid,
+        behaviors: JSON.stringify(behaviors) 
+    };
+    if (status) payload.submission_status = status;
+    await supabase.from('comments').upsert(payload, { onConflict: 'student_id' });
+  };
+
+  const handlePreview = async () => {
+    await saveResultToDB();
+    const { data: results } = await supabase.from('results').select('*, subjects(*)').eq('student_id', selectedStudent.id);
+    const logoBase64 = await imageUrlToBase64(schoolData.logo_url);
+    const principalSigBase64 = await imageUrlToBase64(schoolData.principal_signature_url);
+    const { data: teacherProfile } = await supabase.from('profiles').select('signature_url').eq('id', profile.id).single();
+    const teacherSigBase64 = await imageUrlToBase64(teacherProfile?.signature_url);
+    const behaviorArray = BEHAVIORAL_TRAITS.map(trait => ({ trait, rating: behaviors[trait] || 'Good' }));
+
+    setPreviewData({ 
+        school: schoolData, student: selectedStudent, classInfo: { ...curClass }, 
+        results: results || [], comments: { tutor_comment: comments.full, midterm_tutor_comment: comments.mid }, behaviors: behaviorArray, 
+        logoBase64, principalSigBase64, teacherSigBase64
+    });
+  };
+
+  if (previewData) {
+      return (
+          <div className="fixed inset-0 bg-gray-100 flex flex-col z-50">
+              <div className="bg-white p-4 shadow flex justify-between items-center">
+                  <button onClick={() => setPreviewData(null)} className="flex items-center gap-1 font-bold"><X /> Back</button>
+                  <div className="flex gap-2">
+                     <button onClick={async()=>{if(window.confirm('Submit?')){ await saveResultToDB('awaiting_approval'); setPreviewData(null); }}} className="bg-green-600 text-white px-3 py-2 rounded font-bold text-xs"><ShieldCheck size={14}/> Submit</button>
+                     <PDFDownloadLink document={<ResultPDF {...previewData} reportType="mid" logoBase64={previewData.logoBase64} principalSigBase64={previewData.principalSigBase64} teacherSigBase64={previewData.teacherSigBase64} />} fileName="MidTerm.pdf"><button className="bg-blue-100 text-blue-700 px-3 py-2 rounded font-bold text-xs">Mid-Term</button></PDFDownloadLink>
+                     <PDFDownloadLink document={<ResultPDF {...previewData} reportType="full" logoBase64={previewData.logoBase64} principalSigBase64={previewData.principalSigBase64} teacherSigBase64={previewData.teacherSigBase64} />} fileName="FullTerm.pdf"><button className="bg-blue-600 text-white px-3 py-2 rounded font-bold text-xs">Full-Term</button></PDFDownloadLink>
+                  </div>
+              </div>
+              <PDFViewer className="flex-1 w-full"><ResultPDF {...previewData} reportType="full" logoBase64={previewData.logoBase64} principalSigBase64={previewData.principalSigBase64} teacherSigBase64={previewData.teacherSigBase64} /></PDFViewer>
+          </div>
+      );
+  }
+
+  return (
+    <div className="flex h-screen bg-gray-50 flex-col md:flex-row overflow-hidden">
+      {/* Sidebar */}
+      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed md:relative z-30 inset-y-0 left-0 w-80 bg-white border-r flex flex-col transition duration-200`}>
+        <div className="p-4 bg-slate-900 text-white">
+            <div className="flex justify-between items-center">
+                <h2 className="font-bold truncate text-lg">{profile.full_name}</h2>
+                <button onClick={onLogout} className="text-red-400"><LogOut size={16}/></button>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest">{curClass?.name || 'Loading...'}</p>
+        </div>
+        <div className="p-4 border-b">
+             <button onClick={() => { setShowAddStudent(true); setSelectedStudent(null); }} className="w-full bg-blue-600 text-white py-2.5 rounded shadow text-sm font-bold flex items-center justify-center gap-2 mb-2">
+                 <UserPlus size={18}/> Add New Student
+             </button>
+             <select className="w-full border p-2 rounded text-sm bg-gray-50" onChange={(e) => loadClass(parseInt(e.target.value))}>
+                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+            {curClass && (
+                <>
+                <div className="p-3 bg-gray-50 font-bold text-[10px] text-gray-400 border-b flex justify-between">
+                    <span>SUBJECTS</span>
+                    <button onClick={async()=>{const n=window.prompt('Subject:'); if(n){await supabase.from('subjects').insert({class_id:curClass.id,name:n}); loadClass(curClass.id);}}}><Plus size={16}/></button>
+                </div>
+                <div className="p-3 bg-gray-50 font-bold text-[10px] text-gray-400 border-b">STUDENTS ({students.length})</div>
+                {students.map(s => (
+                    <div key={s.id} onClick={() => loadStudentData(s)} className={`p-3 border-b cursor-pointer flex justify-between text-sm ${selectedStudent?.id === s.id ? 'bg-blue-600 text-white font-bold' : 'hover:bg-gray-50'}`}>
+                        <span>{s.name}</span>
+                        <Trash2 size={14} className="text-gray-300" onClick={async(e)=>{e.stopPropagation(); if(window.confirm('Delete student?')){await supabase.from('students').delete().eq('id',s.id); loadClass(curClass.id);}}}/>
+                    </div>
+                ))}
+                </>
+            )}
+        </div>
+      </div>
+      
+      {/* Overlay */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setSidebarOpen(false)}></div>}
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        <div className="md:hidden mb-4 flex justify-between items-center"><button onClick={()=>setSidebarOpen(true)}><Menu/></button><h1 className="font-bold">{curClass?.name}</h1></div>
+        
+        {showAddStudent ? (
+            <div className="max-w-md mx-auto bg-white p-8 rounded shadow-lg border-t-4 border-blue-600">
+                <h2 className="text-xl font-bold mb-6">Register Student</h2>
+                <form onSubmit={registerStudent} className="space-y-4">
+                    <input name="name" placeholder="Full Name" className="w-full border p-3 rounded" required />
+                    <select name="gender" className="w-full border p-3 rounded"><option>Male</option><option>Female</option></select>
+                    <div className="flex gap-2">
+                        <button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold">Register</button>
+                        <button type="button" onClick={()=>setShowAddStudent(false)} className="flex-1 bg-gray-100 py-2 rounded font-bold">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        ) : !selectedStudent ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                <Users size={64} className="mb-4 text-gray-200"/>
+                <p>Select a student from the menu to record scores.</p>
+            </div>
+        ) : (
+            <div>
+                <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow border">
+                    <div><h1 className="text-2xl font-bold">{selectedStudent.name}</h1><p className="text-xs text-blue-600">{selectedStudent.admission_no}</p></div>
+                    <div className="flex items-center gap-4">
+                        {saving && <span className="text-[10px] text-green-600 font-bold animate-pulse uppercase">Saving...</span>}
+                        <button onClick={handlePreview} className="bg-slate-900 text-white px-4 py-2 rounded font-bold flex items-center gap-2 text-sm"><Eye size={18}/> Preview</button>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded border shadow overflow-hidden mb-8">
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50 border-b">
+                            <tr>
+                                <th className="p-3 text-left">Subject</th>
+                                {schoolConfig.map(c => <th key={c.code} className="p-3 text-center">{c.name}</th>)}
+                                <th className="p-3 text-center bg-gray-50 font-bold">TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {subjects.map(s => {
+                                let total = 0; schoolConfig.forEach(c => total += (scores[s.id]?.[c.code] || 0));
+                                return (
+                                    <tr key={s.id} className="border-b">
+                                        <td className="p-3 font-bold">{s.name}</td>
+                                        {schoolConfig.map(c => (
+                                            <td key={c.code} className="p-3 text-center">
+                                                <input type="number" className="w-16 border rounded p-1 text-center font-bold" 
+                                                    value={scores[s.id]?.[c.code] || ''} onChange={(e) => updateScore(s.id, c.code, e.target.value, c.max)} 
+                                                />
+                                            </td>
+                                        ))}
+                                        <td className="p-3 text-center font-black text-blue-600 bg-gray-50">{total}</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-white p-6 rounded shadow border">
+                        <h3 className="font-bold mb-4 border-b pb-2 uppercase text-[10px] text-gray-400">Behavioral Traits</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {BEHAVIORAL_TRAITS.map(t => (
+                                <div key={t} className="flex justify-between items-center p-1 border-b">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase">{t}</label>
+                                    <select className="text-[10px] font-bold outline-none" value={behaviors[t] || 'Good'} onChange={(e) => { setBehaviors(p => ({...p, [t]: e.target.value})); save(); }}>
+                                        {RATINGS.map(r => <option key={r}>{r}</option>)}
+                                    </select>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="bg-white p-6 rounded shadow border">
+                            <h3 className="font-bold text-xs mb-2">Mid-Term Remark</h3>
+                            <textarea className="w-full border p-3 rounded h-24 text-sm" value={comments.mid} onChange={(e) => { setComments(p => ({...p, mid: e.target.value})); save(); }} />
+                        </div>
+                        <div className="bg-white p-6 rounded shadow border">
+                            <h3 className="font-bold text-xs mb-2">Full Term Remark</h3>
+                            <textarea className="w-full border p-3 rounded h-24 text-sm" value={comments.full} onChange={(e) => { setComments(p => ({...p, full: e.target.value})); save(); }} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ==================== AUTH & PORTALS ====================
+const Auth = ({ onLogin, onParent }) => {
+    const [mode, setMode] = useState('login'); 
+    const [form, setForm] = useState({ email: '', password: '', name: '', pin: '', schoolCode: '' });
+    const [loading, setLoading] = useState(false);
+
+    const handleAuth = async (e) => {
+        e.preventDefault(); setLoading(true);
+        try {
+            if (mode === 'central') {
+                if (form.email === 'oluwatoyin' && form.password === 'Funmilola') onLogin({ role: 'central' });
+            } else if (mode === 'school_reg') {
+                const { data: pinData } = await supabase.from('subscription_pins').select('*').eq('code', form.pin).eq('is_used', false).single();
+                if (!pinData) throw new Error('Invalid or Used PIN');
+                const { data: auth } = await supabase.auth.signUp({ email: form.email, password: form.password });
+                if(auth.user) {
+                    const { data: school } = await supabase.from('schools').insert({ owner_id: auth.user.id, name: 'My School', max_students: pinData.student_limit }).select().single();
+                    await supabase.from('profiles').insert({ id: auth.user.id, full_name: form.name, role: 'admin', school_id: school.id });
+                    await supabase.from('subscription_pins').update({ is_used: true }).eq('id', pinData.id);
+                    alert("Success! Please Login."); setMode('login');
+                }
+            } else if (mode === 'teacher_reg' || mode === 'admin_reg') {
+                 const role = mode === 'teacher_reg' ? 'teacher' : 'admin';
+                 let schoolId = null;
+                 if (role === 'teacher') {
+                     const { data: sch } = await supabase.from('schools').select('id').eq('id', form.schoolCode).single();
+                     if (!sch) throw new Error('Invalid School Code');
+                     schoolId = sch.id;
+                 } else {
+                     const { data: schs } = await supabase.from('schools').select('*'); 
+                     const targetSchool = schs?.find(s => (s.admin_invites || []).some(inv => inv.code === form.schoolCode && inv.email === form.email));
+                     if (!targetSchool) throw new Error("Invalid Invite Code or Email mismatch.");
+                     schoolId = targetSchool.id;
+                 }
+                 const { data: auth } = await supabase.auth.signUp({ email: form.email, password: form.password });
+                 if(auth.user){
+                    await supabase.from('profiles').insert({ id: auth.user.id, full_name: form.name, role: role, school_id: schoolId });
+                    alert(`${role} Registered! Please Login.`); setMode('login');
+                 }
+            } else {
+                const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
+                if (error) throw error;
+            }
+        } catch (err) { alert(err.message); } finally { setLoading(false); }
     };
 
-    const { error } = isEdit 
-      ? await supabase.from('contributors').update(payload).eq('id', member.id)
-      : await supabase.from('contributors').insert([payload]);
-
-    if (error) showToast(error.message, "error");
-    else { showToast(isEdit ? "Updated" : "Created", "success"); onSuccess(); }
-  };
-
-  return (
-    <div style={styles.overlay}>
-      <div style={{ ...styles.modalBox, background: colors.card }}>
-        <h3>{isEdit ? 'Edit Member' : 'Add Member'}</h3>
-        <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
-          <input name="n" defaultValue={member?.full_name} placeholder="Full Name" style={styles.input} required />
-          <input name="r" defaultValue={member?.registration_no} placeholder="Reg Number" style={styles.input} required />
-          <input name="p" defaultValue={member?.phone_number} placeholder="Phone" style={styles.input} required />
-          <input name="a" defaultValue={member?.address} placeholder="Address" style={styles.input} required />
-          <input name="am" type="number" defaultValue={member?.expected_amount} placeholder="Daily Amount" style={styles.input} required />
-          <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-            <button type="submit" style={{ ...styles.btnPrimary, background: colors.primary }}>{isEdit ? 'Save Changes' : 'Create'}</button>
-            <button type="button" onClick={onClose} style={styles.btnSecondary}>Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-/* ===================== SHARED UI ===================== */
-
-const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, config }) => {
-  const stats = useMemo(() => {
-    const myTs = data.transactions.filter(t => t.employee_id === profile.id);
-    const today = new Date().toISOString().slice(0, 10);
-    const todayTotal = myTs.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0);
-    return { todayTotal, count: myTs.filter(t => t.created_at.startsWith(today)).length };
-  }, [data.transactions, profile.id]);
-
-  if (view === 'dashboard') return (
-    <div style={styles.fadeIn}>
-      <AgentDashboard stats={stats} colors={colors} />
-      <SectionHeader title="Your Collections" icon={<Calendar size={20} />} />
-      <TransactionList transactions={data.transactions.filter(t => t.employee_id === profile.id).slice(0, 10)} colors={colors} />
-    </div>
-  );
-  if (view === 'members') return <MemberManagement members={data.members} onRefresh={onRefresh} showToast={showToast} colors={colors} config={config} isAdmin={false} />;
-  if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} />;
-  return null;
-};
-
-const AgentDashboard = ({ stats, colors }) => {
-  const anim = useCountUp(stats.todayTotal);
-  return (
-    <div style={{ ...styles.heroCard, background: colors.primary }}>
-      <small>TODAY'S TOTAL</small>
-      <h1 style={{ fontSize: 32 }}>₦{anim.toLocaleString()}</h1>
-      <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
-        <span>{stats.count} Transactions</span>
-        <span>{new Date().toLocaleDateString()}</span>
-      </div>
-    </div>
-  );
-};
-
-const TransactionList = ({ transactions, colors }) => {
-  const isToday = (d) => new Date(d).toDateString() === new Date().toDateString();
-  return (
-    <div style={styles.list}>
-      {transactions.map(t => (
-        <div key={t.id} style={{ 
-          ...styles.listItem, 
-          background: colors.card, 
-          borderColor: isToday(t.created_at) ? colors.primary : colors.border,
-          borderLeft: isToday(t.created_at) ? `4px solid ${colors.primary}` : `1px solid ${colors.border}`
-        }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <strong>{t.full_name}</strong>
-              <Badge amt={t.amount} exp={t.expected_amount} />
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+            <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-md border-t-4 border-blue-600">
+                <div className="text-center mb-6"><div className="bg-blue-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"><School className="text-blue-600" size={24} /></div><h1 className="text-2xl font-bold">Springforth Results</h1></div>
+                <div className="flex flex-wrap justify-center gap-3 mb-6 text-[10px] font-bold uppercase border-b pb-2">
+                    {['login', 'school_reg', 'teacher_reg', 'admin_reg'].map(m => <button key={m} onClick={()=>setMode(m)} className={`capitalize ${mode===m?'text-blue-600 border-b border-blue-600':''}`}>{m.replace('_', ' ')}</button>)}
+                </div>
+                <form onSubmit={handleAuth} className="space-y-4">
+                    {mode.includes('reg') && <input placeholder="Full Name" className="w-full p-2 border rounded" onChange={e=>setForm({...form, name:e.target.value})} required />}
+                    <input type="email" placeholder="Email" className="w-full p-2 border rounded" onChange={e=>setForm({...form, email:e.target.value})} required />
+                    <input type="password" placeholder="Password" className="w-full p-2 border rounded" onChange={e=>setForm({...form, password:e.target.value})} required />
+                    {mode === 'school_reg' && <input placeholder="Subscription PIN" className="w-full p-2 border rounded" onChange={e=>setForm({...form, pin:e.target.value})} required />}
+                    {(mode === 'teacher_reg' || mode === 'admin_reg') && <input placeholder="School ID / Invite Code" className="w-full p-2 border rounded" onChange={e=>setForm({...form, schoolCode:e.target.value})} required />}
+                    <button disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded font-bold">{loading ? '...' : 'Access Portal'}</button>
+                </form>
+                {mode === 'login' && (
+                    <div className="mt-6 pt-4 border-t"><button onClick={onParent} className="w-full bg-green-600 text-white py-2 rounded font-bold flex items-center justify-center gap-2"><User size={18}/> Check Result</button></div>
+                )}
             </div>
-            <div style={styles.subtext}>By Agent: {t.employee_name || 'Admin'}</div>
-          </div>
-          <strong style={{ color: colors.primary }}>₦{t.amount?.toLocaleString()}</strong>
         </div>
-      ))}
-    </div>
-  );
+    );
 };
 
-const Badge = ({ amt, exp }) => {
-  const type = amt > exp ? 'Extra' : amt < exp ? 'Partial' : 'Paid';
-  const color = type === 'Extra' ? '#a855f7' : type === 'Partial' ? '#f59e0b' : '#10b981';
-  return <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: color + '22', color, fontWeight: 'bold' }}>{type}</span>;
-};
+const ParentPortal = ({ onBack }) => {
+    const [creds, setCreds] = useState({ adm: '', pin: '' });
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(false);
 
-const ScannerView = ({ profile, onRefresh, showToast, colors }) => {
-  const [scanning, setScanning] = useState(false);
-  const [member, setMember] = useState(null);
-  const [amt, setAmt] = useState('');
+    const fetchResult = async (e) => {
+        e.preventDefault(); setLoading(true);
+        const { data: stu } = await supabase.from('students').select('*, schools(*), classes(*, profiles(signature_url)), comments(*), results(*, subjects(*))').eq('admission_no', creds.adm).eq('parent_pin', creds.pin).maybeSingle();
+        if (!stu) { alert('Invalid Credentials'); setLoading(false); return; }
+        const comm = Array.isArray(stu.comments) ? stu.comments[0] : stu.comments;
+        if (comm?.submission_status !== 'approved') { alert("Not yet approved."); setLoading(false); return; }
+        const behaviors = comm?.behaviors ? JSON.parse(comm.behaviors) : {};
+        const behaviorArray = BEHAVIORAL_TRAITS.map(trait => ({ trait, rating: behaviors[trait] || 'Good' }));
+        const logoBase64 = await imageUrlToBase64(stu.schools.logo_url);
+        const principalSigBase64 = await imageUrlToBase64(stu.schools.principal_signature_url);
+        const teacherSigBase64 = await imageUrlToBase64(stu.classes?.profiles?.signature_url);
+        setData({ student: stu, school: stu.schools, classInfo: stu.classes, results: stu.results, comments: comm || {}, behaviors: behaviorArray, logoBase64, principalSigBase64, teacherSigBase64 });
+        setLoading(false);
+    };
 
-  const handleScan = async (res) => {
-    try {
-      const { id } = JSON.parse(res);
-      const { data: m } = await supabase.from('contributors').select('*').eq('id', id).single();
-      if (m) { setMember(m); setAmt(m.expected_amount); setScanning(false); }
-    } catch (e) { showToast("Invalid Card", "error"); }
-  };
-
-  if (member) return (
-    <div style={{ ...styles.modalBox, background: colors.card, margin: '0 auto' }}>
-      <User size={40} color={colors.primary} />
-      <h2>{member.full_name}</h2>
-      <input type="number" value={amt} onChange={e => setAmt(e.target.value)} style={styles.bigInput} />
-      <button onClick={async () => {
-        const { error } = await supabase.from('transactions').insert([{ 
-          contributor_id: member.id, full_name: member.full_name, registration_no: member.registration_no,
-          amount: Number(amt), employee_id: profile.id, employee_name: profile.full_name, expected_amount: member.expected_amount
-        }]);
-        if (!error) { showToast("Payment Saved", "success"); setMember(null); onRefresh(); }
-      }} style={{ ...styles.btnPrimary, background: colors.primary }}>Confirm Payment</button>
-      <button onClick={() => setMember(null)} style={styles.btnSecondary}>Cancel</button>
-    </div>
-  );
-
-  return (
-    <div style={{ textAlign: 'center' }}>
-      {!scanning ? <button onClick={() => setScanning(true)} style={styles.scanBtn}><Camera size={32}/> Scan Card</button> :
-      <div style={styles.scanner}><Scanner onScan={(r) => r?.[0] && handleScan(r[0].rawValue)} /><button onClick={() => setScanning(false)} style={styles.closeBtn}><X/></button></div>}
-    </div>
-  );
-};
-
-/* ===================== UI HELPERS ===================== */
-
-const ConfirmationModal = ({ modal, onClose, colors }) => {
-  const [val, setVal] = useState('');
-  return (
-    <div style={styles.overlay}>
-      <div style={{ ...styles.modalBox, background: colors.card, borderColor: colors.border }}>
-        <h3>{modal.title}</h3>
-        <p>{modal.msg}</p>
-        {modal.isPrompt && <input style={styles.input} value={val} onChange={e => setVal(e.target.value)} autoFocus />}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button style={{ ...styles.btnPrimary, background: colors.primary }} onClick={() => { modal.onConfirm(val); onClose(); }}>Confirm</button>
-          <button style={styles.btnSecondary} onClick={onClose}>Cancel</button>
+    if (data) return (
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-900 h-screen">
+            <div className="bg-white p-4 shadow flex justify-between items-center"><button onClick={()=>setData(null)} className="font-bold flex items-center gap-2"><X /> Exit</button><PDFDownloadLink document={<ResultPDF {...data} reportType="full" logoBase64={data.logoBase64} principalSigBase64={data.principalSigBase64} teacherSigBase64={data.teacherSigBase64} />} fileName="Result.pdf"><button className="bg-blue-600 text-white px-4 py-2 rounded font-bold">Download PDF</button></PDFDownloadLink></div>
+            <PDFViewer className="flex-1 w-full"><ResultPDF {...data} reportType="full" logoBase64={data.logoBase64} principalSigBase64={data.principalSigBase64} teacherSigBase64={data.teacherSigBase64} /></PDFViewer>
         </div>
-      </div>
-    </div>
-  );
-};
+    );
 
-const Header = ({ business, role, isDark, onToggleTheme, colors }) => (
-  <header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}>
-    <div><h1 style={styles.brand}>{business}</h1><small style={{ color: colors.primary }}>{role.toUpperCase()}</small></div>
-    <button onClick={onToggleTheme} style={styles.iconBtn}>{isDark ? <Sun color="#fff"/> : <Moon color="#000"/>}</button>
-  </header>
-);
-
-const Navigation = ({ view, role, onNavigate, onLogout, colors }) => (
-  <nav className="mobile-nav" style={{ ...styles.nav, background: colors.card, borderTop: `1px solid ${colors.border}` }}>
-    <NavBtn active={view === 'dashboard'} icon={<LayoutDashboard/>} label="Home" onClick={() => onNavigate('dashboard')} colors={colors} />
-    <NavBtn active={view === 'members'} icon={<Users/>} label="Members" onClick={() => onNavigate('members')} colors={colors} />
-    {role === 'admin' ? <NavBtn active={view === 'agents'} icon={<UserCheck/>} label="Agents" onClick={() => onNavigate('agents')} colors={colors} /> :
-    <NavBtn active={view === 'scan'} icon={<Camera/>} label="Scan" onClick={() => onNavigate('scan')} colors={colors} />}
-    <NavBtn icon={<LogOut/>} label="Exit" onClick={onLogout} colors={colors} />
-  </nav>
-);
-
-const NavBtn = ({ active, icon, label, onClick, colors }) => (
-  <button onClick={onClick} style={{ ...styles.navBtn, color: active ? colors.primary : colors.textSecondary }}>{icon}<span style={{ fontSize: 10 }}>{label}</span></button>
-);
-
-const DashboardStats = ({ stats, memberCount, colors }) => (
-  <div style={styles.statsGrid}>
-    <StatCard title="Today" value={`₦${useCountUp(stats.todayRev).toLocaleString()}`} colors={colors} />
-    <StatCard title="Members" value={memberCount} colors={colors} />
-    <StatCard title="Total" value={`₦${useCountUp(stats.totalRev).toLocaleString()}`} colors={colors} />
-  </div>
-);
-
-const StatCard = ({ title, value, colors }) => (
-  <div style={{ ...styles.statCard, background: colors.card, borderColor: colors.border }}>
-    <small style={{ opacity: 0.6 }}>{title}</small>
-    <div style={{ fontSize: 16, fontWeight: 'bold' }}>{value}</div>
-  </div>
-);
-
-const SearchBar = ({ value, onChange, placeholder, colors }) => (
-  <div style={{ ...styles.searchBar, background: colors.card, borderColor: colors.border }}>
-    <Search size={18} opacity={0.5} />
-    <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ background: 'none', border: 'none', color: colors.text, width: '100%', outline: 'none' }} />
-  </div>
-);
-
-const SectionHeader = ({ title, icon }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '20px 0 10px' }}>{icon} <strong>{title}</strong></div>
-);
-
-const AgentManagement = ({ agents, transactions, onRefresh, showToast, colors, confirmAction }) => {
-  const stats = agents.map(a => ({ ...a, total: transactions.filter(t => t.employee_id === a.id).reduce((s, t) => s + (t.amount || 0), 0) }));
-  return (
-    <div>
-      <div style={styles.exportBar}>
-        <button onClick={() => exportToCSV('Agents', agents)} style={{...styles.btnGhost, color: colors.primary}}><Download size={16}/> Export Agents</button>
-      </div>
-      {stats.map(a => (
-        <div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-          <div style={{ ...styles.avatar, background: colors.primary }}>{a.full_name[0]}</div>
-          <div style={{ flex: 1 }}><strong>{a.full_name}</strong><br/><small>Total: ₦{a.total.toLocaleString()}</small></div>
-          <div style={{ display: 'flex', gap: 5 }}>
-            <button onClick={() => confirmAction("Password", "New password:", async (p) => {
-              await supabase.from('employees').update({ password: p }).eq('id', a.id);
-              showToast("Updated");
-            }, true)} style={{ ...styles.iconBtn, color: colors.primary }}><Key size={18} /></button>
-            <button onClick={() => confirmAction("Delete", "Remove agent?", async () => {
-              await supabase.from('employees').delete().eq('id', a.id);
-              onRefresh();
-            })} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
-          </div>
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-green-50 p-4">
+            <form onSubmit={fetchResult} className="bg-white p-8 rounded shadow w-full max-w-sm border-t-4 border-green-600">
+                <h2 className="text-xl font-bold text-center mb-6 uppercase tracking-widest">Parent Portal</h2>
+                <input placeholder="Admission No" className="w-full p-2 border rounded mb-3" onChange={e=>setCreds({...creds, adm:e.target.value})} required />
+                <input type="password" placeholder="Access PIN" className="w-full p-2 border rounded mb-4" onChange={e=>setCreds({...creds, pin:e.target.value})} required />
+                <button disabled={loading} className="w-full bg-green-600 text-white py-2 rounded font-bold">{loading ? '...' : 'Check Result'}</button>
+                <button type="button" onClick={onBack} className="w-full text-center text-xs mt-4 text-gray-400">Back</button>
+            </form>
         </div>
-      ))}
-    </div>
-  );
+    );
 };
 
-/* ===================== FALLBACKS ===================== */
-
-const SkeletonLoader = () => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-      {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 60, borderRadius: 12 }}></div>)}
-    </div>
-    {[1, 2, 3, 4].map(i => <div key={i} className="skeleton" style={{ height: 50, borderRadius: 12 }}></div>)}
-  </div>
-);
-
-const ToastContainer = ({ toasts }) => (
-  <div style={styles.toastContainer}>
-    {toasts.map(t => (
-      <div key={t.id} style={{ ...styles.toast, background: t.type === 'error' ? '#ef4444' : '#10b981' }}>
-        {t.type === 'error' ? <AlertCircle size={16}/> : <CheckCircle2 size={16}/>}
-        {t.message}
-      </div>
-    ))}
-  </div>
-);
-
-const LoginScreen = ({ onLogin, loading, theme }) => {
-  const [type, setType] = useState('admin');
-  const colors = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
-  return (
-    <div style={{ ...styles.loginPage, background: colors.bg }}>
-      <div style={{ ...styles.loginCard, background: colors.card, borderColor: colors.border }}>
-        <Landmark size={48} color={colors.primary} />
-        <h2 style={{ margin: '10px 0' }}>{CONFIG.business.name}</h2>
-        <div style={{ display: 'flex', gap: 5, background: colors.bg, padding: 4, borderRadius: 10, marginBottom: 20 }}>
-          <button onClick={() => setType('admin')} style={{ ...styles.tab, background: type === 'admin' ? colors.primary : 'none', color: type === 'admin' ? '#fff' : colors.textSecondary }}>Admin</button>
-          <button onClick={() => setType('agent')} style={{ ...styles.tab, background: type === 'agent' ? colors.primary : 'none', color: type === 'agent' ? '#fff' : colors.textSecondary }}>Agent</button>
+const CentralAdmin = ({ onLogout }) => {
+    const [pins, setPins] = useState([]);
+    useEffect(()=>{ const f = async () => { const {data} = await supabase.from('subscription_pins').select('*'); setPins(data||[]); }; f(); },[]);
+    return (
+        <div className="p-8 bg-slate-900 min-h-screen text-white font-mono">
+            <div className="flex justify-between items-center mb-8"><h1 className="text-2xl font-bold">Central</h1><button onClick={onLogout} className="text-red-400 border px-2 py-1 rounded">Logout</button></div>
+            <button onClick={async()=>{ await supabase.from('subscription_pins').insert({ code: `SUB-${Math.floor(Math.random()*90000)}`, student_limit: 100 }); window.location.reload(); }} className="bg-blue-600 px-4 py-2 rounded mb-6">+ New PIN</button>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {pins.map(p=><div key={p.id} className={`p-4 rounded border ${p.is_used ? 'bg-slate-800' : 'bg-green-900'}`}><p className="font-bold">{p.code}</p></div>)}
+            </div>
         </div>
-        <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); onLogin({ username: fd.get('u'), password: fd.get('p') }); }}>
-          <input name="u" placeholder="ID / Username" style={styles.input} required />
-          <input name="p" type="password" placeholder="Password" style={styles.input} required />
-          <button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: colors.primary }}>{loading ? '...' : 'Sign In'}</button>
-        </form>
-      </div>
-    </div>
-  );
+    );
 };
 
-/* ===================== STYLES ===================== */
-const DARK_THEME = { bg: '#020617', card: '#0f172a', text: '#f8fafc', textSecondary: '#94a3b8', border: '#1e293b', primary: '#3b82f6' };
-const LIGHT_THEME = { bg: '#f1f5f9', card: '#ffffff', text: '#0f172a', textSecondary: '#64748b', border: '#e2e8f0', primary: '#2563eb' };
+// ==================== APP ROOT ====================
+const App = () => {
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [view, setView] = useState('auth');
+  const [loading, setLoading] = useState(true);
 
-const styles = {
-  app: { minHeight: '100vh', transition: '0.3s' },
-  header: { padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 },
-  brand: { fontSize: 16, fontWeight: '900', margin: 0 },
-  main: { padding: 20, paddingBottom: 100, maxWidth: 600, margin: '0 auto' },
-  nav: { display: 'flex', justifyContent: 'space-around', padding: '12px 0', zIndex: 100 },
-  navBtn: { background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', gap: 4 },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 },
-  statCard: { padding: 12, borderRadius: 12, border: '1px solid', textAlign: 'center' },
-  heroCard: { padding: 25, borderRadius: 16, color: '#fff', marginBottom: 20 },
-  listItem: { display: 'flex', alignItems: 'center', padding: 12, borderRadius: 12, border: '1px solid', marginBottom: 10, gap: 12 },
-  avatar: { width: 36, height: 36, borderRadius: '50%', background: '#3b82f622', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' },
-  subtext: { fontSize: 11, opacity: 0.6 },
-  searchBar: { display: 'flex', alignItems: 'center', padding: '10px 15px', borderRadius: 12, border: '1px solid', marginBottom: 15, gap: 10 },
-  input: { width: '100%', padding: 12, marginBottom: 10, borderRadius: 8, border: '1px solid #ddd', boxSizing: 'border-box' },
-  btnPrimary: { color: '#fff', border: 'none', borderRadius: 10, padding: 12, width: '100%', fontWeight: 'bold', cursor: 'pointer' },
-  btnSecondary: { background: '#64748b', color: '#fff', border: 'none', borderRadius: 10, padding: 12, width: '100%', cursor: 'pointer' },
-  btnGhost: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4 },
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 },
-  modalBox: { padding: 25, borderRadius: 20, width: '100%', maxWidth: 350, textAlign: 'center' },
-  toastContainer: { position: 'fixed', top: 70, left: 20, right: 20, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 2000 },
-  toast: { padding: '10px 15px', borderRadius: 10, color: '#fff', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 },
-  loginPage: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  loginCard: { padding: 30, borderRadius: 24, width: '100%', maxWidth: 360, textAlign: 'center', border: '1px solid' },
-  tab: { flex: 1, padding: 8, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 'bold' },
-  scanBtn: { padding: '40px 20px', borderRadius: 20, width: '100%', border: '2px dashed #3b82f6', background: 'none', color: '#3b82f6', fontWeight: 'bold', fontSize: 18, cursor: 'pointer' },
-  bigInput: { fontSize: 40, width: '100%', textAlign: 'center', background: 'none', border: 'none', borderBottom: '2px solid #3b82f6', margin: '20px 0', outline: 'none' },
-  offlineBanner: { background: '#ef4444', color: '#fff', textAlign: 'center', padding: 5, fontSize: 11 },
-  exportBar: { display: 'flex', gap: 10, marginBottom: 15, justifyContent: 'flex-end' },
-  fadeIn: { animation: 'fadeIn 0.3s ease' }
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); if(!session) setLoading(false); });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session); if (!session) { setProfile(null); setView('auth'); setLoading(false); }
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      const fetchProfile = async () => {
+        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+        setProfile(data); setLoading(false);
+      };
+      fetchProfile();
+    }
+  }, [session]);
+
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48}/></div>;
+  if (view === 'central') return <CentralAdmin onLogout={() => setView('auth')} />;
+  if (view === 'parent') return <ParentPortal onBack={() => setView('auth')} />;
+  if (!session) return <Auth onLogin={(d) => setView(d.role === 'central' ? 'central' : 'dashboard')} onParent={() => setView('parent')} />;
+  if (!profile) return <div className="h-screen flex items-center justify-center text-red-500 font-bold">Profile Error. Contact Support.</div>;
+
+  return profile.role === 'admin' ? <SchoolAdmin profile={profile} onLogout={() => supabase.auth.signOut()} /> : <TeacherDashboard profile={profile} onLogout={() => supabase.auth.signOut()} />;
 };
 
-if (typeof document !== 'undefined') {
-  const s = document.createElement('style');
-  s.textContent = `
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 0.2; } 100% { opacity: 0.5; } }
-    .skeleton { background: #888; animation: pulse 1.5s infinite; }
-    @media (max-width: 768px) { .mobile-nav { position: fixed !important; bottom: 0; left: 0; right: 0; } }
-    @media print { body * { visibility: hidden; } #printable-card, #printable-card * { visibility: visible; } #printable-card { position: fixed; left: 0; top: 0; } }
-    .listItem { transition: 0.2s; }
-    .listItem:active { transform: scale(0.98); }
-  `;
-  document.head.appendChild(s);
-}
+export default App;
