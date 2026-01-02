@@ -235,7 +235,12 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
   return (
     <div style={styles.fadeIn}>
       <SearchBar value={search} onChange={setSearch} placeholder="Search..." colors={colors} />
-      {isAdmin && <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15 }}><UserPlus size={18} /> New {mode === 'ajo' ? 'Member' : 'Loan Client'}</button>}
+      {/* RESTRICTED: Only Owners (Admin) can add members */}
+      {isAdmin && (
+        <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15 }}>
+          <UserPlus size={18} /> New {mode === 'ajo' ? 'Member' : 'Loan Client'}
+        </button>
+      )}
       
       {form.show && <MemberForm member={form.member} mode={mode} onClose={() => setForm({ show: false, member: null })} onSuccess={() => { setForm({ show: false, member: null }); onRefresh(); }} showToast={showToast} colors={colors} />}
 
@@ -256,8 +261,13 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
                 )}
               </div>
               <div style={{ display: 'flex', gap: 5 }}>
-                <button onClick={() => setPrintMember(m)} style={{ ...styles.iconBtn, color: colors.primary }}><Printer size={18} /></button>
-                <button onClick={() => setForm({ show: true, member: m })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
+                <button onClick={() => setPrintMember(m)} style={{ ...styles.iconBtn, color: colors.primary }}><Printer size={18} title="Print Card" /></button>
+                {/* RESTRICTED: Only Owners (Admin) can edit member details */}
+                {isAdmin && (
+                  <button onClick={() => setForm({ show: true, member: m })} style={{ ...styles.iconBtn, color: colors.primary }}>
+                    <Edit3 size={18} title="Edit Member" />
+                  </button>
+                )}
               </div>
             </div>
           );
