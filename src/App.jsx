@@ -267,13 +267,13 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
                     <button onClick={() => setForm({ show: true, member: m })} style={{ ...styles.iconBtn, color: colors.primary }} title="Edit"><Edit3 size={18} /></button>
                     <button 
                       onClick={() => confirmAction(
-                        "Delete Member", 
-                        `Are you sure you want to permanently delete ${m.full_name}? This will remove all their records.`, 
+                        "Delete Record", 
+                        `Delete ${m.full_name} from the ${mode.toUpperCase()} system?`, 
                         async () => {
                           const table = CONFIG.modes[mode].membersTable;
                           const { error } = await supabase.from(table).delete().eq('id', m.id);
-                          if (error) showToast("Error deleting", "error");
-                          else { showToast("Member Deleted", "success"); onRefresh(); }
+                          if (error) showToast("Delete failed", "error");
+                          else { showToast("Record Deleted", "success"); onRefresh(); }
                         }
                       )} 
                       style={{ ...styles.iconBtn, color: '#ef4444' }}
@@ -427,7 +427,7 @@ const PrintCard = ({ member, mode, onClose, colors }) => {
       <div style={{ ...styles.modalBox, background: '#fff', color: '#000', padding: 0, overflow: 'hidden' }}>
         <div id="printable-card" style={{ padding: 20, width: 300, margin: '0 auto', textAlign: 'center', border: '2px solid #3b82f6', borderRadius: 15 }}>
           <h2 style={{ fontSize: 16, margin: '0 0 5px 0', color: colors.primary }}>{CONFIG.business.name}</h2>
-          <small style={{ display: 'block', marginBottom: 10, fontSize: 10, opacity: 0.7 }}>{mode.toUpperCase()} IDENTITY CARD</small>
+          <small style={{ display: 'block', marginBottom: 10, fontSize: 10, opacity: 0.7 }}>{mode.toUpperCase() IDENTITY CARD</small>
           
           <div style={{ background: '#f8fafc', padding: 15, borderRadius: 10, marginBottom: 10 }}>
             <img src={qrUrl} alt="QR Code" style={{ width: 140, height: 140 }} />
