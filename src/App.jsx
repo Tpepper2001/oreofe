@@ -234,8 +234,8 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
 
   return (
     <div style={styles.fadeIn}>
-      <SearchBar value={search} onChange={setSearch} placeholder="Search..." colors={colors} />
-      {/* RESTRICTED: Only Owners (Admin) can add members */}
+      <SearchBar value={search} onChange={setSearch} placeholder="Search names or IDs..." colors={colors} />
+      
       {isAdmin && (
         <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15 }}>
           <UserPlus size={18} /> New {mode === 'ajo' ? 'Member' : 'Loan Client'}
@@ -255,18 +255,33 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
                 <div style={styles.subtext}>ID: {m.registration_no}</div>
                 {mode === 'loans' && (
                   <div style={{ fontSize: 11, marginTop: 4 }}>
-                    <span style={{ color: colors.textSecondary }}>Repay: ₦{m.expected_amount} • </span>
+                    <span style={{ color: colors.textSecondary }}>Inst: ₦{m.expected_amount} • </span>
                     <span style={{ color: balance > 0 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>Bal: ₦{balance.toLocaleString()}</span>
                   </div>
                 )}
               </div>
               <div style={{ display: 'flex', gap: 5 }}>
-                <button onClick={() => setPrintMember(m)} style={{ ...styles.iconBtn, color: colors.primary }}><Printer size={18} title="Print Card" /></button>
-                {/* RESTRICTED: Only Owners (Admin) can edit member details */}
+                <button onClick={() => setPrintMember(m)} style={{ ...styles.iconBtn, color: colors.primary }} title="Print Card"><Printer size={18} /></button>
                 {isAdmin && (
-                  <button onClick={() => setForm({ show: true, member: m })} style={{ ...styles.iconBtn, color: colors.primary }}>
-                    <Edit3 size={18} title="Edit Member" />
-                  </button>
+                  <>
+                    <button onClick={() => setForm({ show: true, member: m })} style={{ ...styles.iconBtn, color: colors.primary }} title="Edit"><Edit3 size={18} /></button>
+                    <button 
+                      onClick={() => confirmAction(
+                        "Delete Member", 
+                        `Are you sure you want to permanently delete ${m.full_name}? This will remove all their records.`, 
+                        async () => {
+                          const table = CONFIG.modes[mode].membersTable;
+                          const { error } = await supabase.from(table).delete().eq('id', m.id);
+                          if (error) showToast("Error deleting", "error");
+                          else { showToast("Member Deleted", "success"); onRefresh(); }
+                        }
+                      )} 
+                      style={{ ...styles.iconBtn, color: '#ef4444' }}
+                      title="Delete"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -304,7 +319,7 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
         <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
           <input name="n" defaultValue={member?.full_name} placeholder="Full Name" style={styles.input} required />
           <input name="r" defaultValue={member?.registration_no} placeholder="ID Number" style={styles.input} required />
-          <input name="am" type="number" defaultValue={member?.expected_amount} placeholder={mode === 'ajo' ? "Daily Save" : "Repayment"} style={styles.input} required />
+          <input name="am" type="number" defaultValue={member?.expected_amount} placeholder={mode === 'ajo' ? "Daily Save" : "Instalment"} style={styles.input} required />
           {mode === 'loans' && (
             <>
               <input name="tla" type="number" defaultValue={member?.total_loan_amount} placeholder="Loan Taken" style={styles.input} required />
@@ -356,11 +371,11 @@ const AgentManagement = ({ agents, transactions, onRefresh, showToast, colors, c
               <small style={styles.subtext}>ID: {a.employee_id_number} • ₦{a.total.toLocaleString()}</small>
             </div>
             <div style={{ display: 'flex', gap: 5 }}>
-              <button onClick={() => setForm({ show: true, agent: a })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
-              <button onClick={() => confirmAction("Delete", `Remove ${a.full_name}?`, async () => { 
+              <button onClick={() => setForm({ show: true, agent: a })} style={{ ...styles.iconBtn, color: colors.primary }} title="Edit"><Edit3 size={18} /></button>
+              <button onClick={() => confirmAction("Delete Agent", `Permanently remove ${a.full_name}?`, async () => { 
                 await supabase.from('employees').delete().eq('id', a.id); 
                 onRefresh(); 
-              })} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
+              })} style={{ ...styles.iconBtn, color: '#ef4444' }} title="Delete"><Trash2 size={18} /></button>
             </div>
           </div>
         ))}
@@ -371,7 +386,6 @@ const AgentManagement = ({ agents, transactions, onRefresh, showToast, colors, c
 
 const AgentForm = ({ agent, onClose, onSuccess, showToast, colors }) => {
   const isEdit = !!agent;
-  
   const handleSubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -380,31 +394,20 @@ const AgentForm = ({ agent, onClose, onSuccess, showToast, colors }) => {
       employee_id_number: fd.get('id_num').trim().toLowerCase(),
       password: fd.get('pass')
     };
-
-    const { error } = isEdit 
-      ? await supabase.from('employees').update(payload).eq('id', agent.id)
-      : await supabase.from('employees').insert([payload]);
-
+    const { error } = isEdit ? await supabase.from('employees').update(payload).eq('id', agent.id) : await supabase.from('employees').insert([payload]);
     if (error) showToast(error.message, "error");
-    else { showToast(isEdit ? "Agent Updated" : "Agent Created", "success"); onSuccess(); }
+    else { showToast(isEdit ? "Updated" : "Created", "success"); onSuccess(); }
   };
-
   return (
     <div style={styles.overlay}>
       <div style={{ ...styles.modalBox, background: colors.card }}>
         <h3>{isEdit ? 'Edit Agent' : 'Create Agent'}</h3>
         <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
-          <label style={{ fontSize: 10, opacity: 0.6, marginLeft: 5 }}>Full Name</label>
-          <input name="n" defaultValue={agent?.full_name} placeholder="John Doe" style={styles.input} required />
-          
-          <label style={{ fontSize: 10, opacity: 0.6, marginLeft: 5 }}>ID Number (Login Username)</label>
-          <input name="id_num" defaultValue={agent?.employee_id_number} placeholder="agent001" style={styles.input} required />
-          
-          <label style={{ fontSize: 10, opacity: 0.6, marginLeft: 5 }}>Login Password</label>
-          <input name="pass" type="text" defaultValue={agent?.password} placeholder="Secret Password" style={styles.input} required />
-          
+          <input name="n" defaultValue={agent?.full_name} placeholder="Full Name" style={styles.input} required />
+          <input name="id_num" defaultValue={agent?.employee_id_number} placeholder="Login ID" style={styles.input} required />
+          <input name="pass" type="text" defaultValue={agent?.password} placeholder="Login Password" style={styles.input} required />
           <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-            <button type="submit" style={{ ...styles.btnPrimary, background: colors.primary }}>{isEdit ? 'Save Changes' : 'Register Agent'}</button>
+            <button type="submit" style={{ ...styles.btnPrimary, background: colors.primary }}>Save</button>
             <button type="button" onClick={onClose} style={styles.btnSecondary}>Cancel</button>
           </div>
         </form>
@@ -472,7 +475,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
           amount: Number(amt), employee_id: profile.id, employee_name: profile.full_name, expected_amount: member.expected_amount
         }]);
         if (!error) { showToast("Saved", "success"); setMember(null); onRefresh(); }
-      }} style={{ ...styles.btnPrimary, background: colors.primary }}>Confirm Payment</button>
+      }} style={{ ...styles.btnPrimary, background: colors.primary }}>Confirm Entry</button>
       <button onClick={() => setMember(null)} style={styles.btnSecondary}>Cancel</button>
     </div>
   );
@@ -488,7 +491,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
 const Header = ({ business, role, isDark, onToggleTheme, onSwitchMode, colors }) => (
   <header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <button onClick={onSwitchMode} style={{ ...styles.iconBtn, color: colors.text }}><ArrowLeftRight size={20}/></button>
+      <button onClick={onSwitchMode} style={{ ...styles.iconBtn, color: colors.text }} title="Switch Mode"><ArrowLeftRight size={20}/></button>
       <div><h1 style={styles.brand}>{business}</h1><small style={{ color: colors.primary }}>{role.toUpperCase()}</small></div>
     </div>
     <button onClick={onToggleTheme} style={styles.iconBtn}>{isDark ? <Sun color="#fff"/> : <Moon color="#000"/>}</button>
@@ -512,15 +515,15 @@ const NavBtn = ({ active, icon, label, onClick, colors }) => (
 const DashboardStats = ({ stats, memberCount, colors }) => (
   <div style={styles.statsGrid}>
     <StatCard title="Today" value={`₦${useCountUp(stats.todayRev).toLocaleString()}`} colors={colors} />
-    <StatCard title="Count" value={memberCount} colors={colors} />
-    <StatCard title="Total" value={`₦${useCountUp(stats.totalRev).toLocaleString()}`} colors={colors} />
+    <StatCard title="Total People" value={memberCount} colors={colors} />
+    <StatCard title="Gross Total" value={`₦${useCountUp(stats.totalRev).toLocaleString()}`} colors={colors} />
   </div>
 );
 
 const StatCard = ({ title, value, colors }) => (
   <div style={{ ...styles.statCard, background: colors.card, borderColor: colors.border }}>
     <small style={{ opacity: 0.6 }}>{title}</small>
-    <div style={{ fontSize: 15, fontWeight: 'bold' }}>{value}</div>
+    <div style={{ fontSize: 14, fontWeight: 'bold' }}>{value}</div>
   </div>
 );
 
