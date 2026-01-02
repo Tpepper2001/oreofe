@@ -70,6 +70,7 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [modal, setModal] = useState({ show: false, title: '', msg: '', onConfirm: null, isPrompt: false });
+  const [printMember, setPrintMember] = useState(null);
 
   const showToast = useCallback((message, type = 'info') => {
     const id = Date.now();
@@ -157,8 +158,8 @@ export default function App() {
       <main style={styles.main}>
         {loading ? <SkeletonLoader /> : (
           <>
-            {auth.role === 'admin' && <AdminPortal view={view} data={data} onRefresh={fetchData} showToast={showToast} colors={colors} config={CONFIG.business} confirmAction={confirmAction} mode={mode} />}
-            {auth.role === 'agent' && <AgentPortal view={view} profile={auth.data} data={data} onRefresh={fetchData} showToast={showToast} colors={colors} config={CONFIG.business} mode={mode} />}
+            {auth.role === 'admin' && <AdminPortal view={view} data={data} onRefresh={fetchData} showToast={showToast} colors={colors} config={CONFIG.business} confirmAction={confirmAction} mode={mode} setPrintMember={setPrintMember} />}
+            {auth.role === 'agent' && <AgentPortal view={view} profile={auth.data} data={data} onRefresh={fetchData} showToast={showToast} colors={colors} config={CONFIG.business} mode={mode} setPrintMember={setPrintMember} />}
           </>
         )}
       </main>
@@ -166,13 +167,14 @@ export default function App() {
       <Navigation view={view} role={auth.role} onNavigate={setView} onLogout={() => confirmAction("Logout", "Exit application?", () => setAuth(null))} colors={colors} />
       <ToastContainer toasts={toasts} />
       {modal.show && <ConfirmationModal modal={modal} onClose={() => setModal({ ...modal, show: false })} colors={colors} />}
+      {printMember && <PrintCard member={printMember} mode={mode} onClose={() => setPrintMember(null)} colors={colors} />}
     </div>
   );
 }
 
 /* ===================== PORTALS ===================== */
 
-const AdminPortal = ({ view, data, onRefresh, showToast, colors, config, confirmAction, mode }) => {
+const AdminPortal = ({ view, data, onRefresh, showToast, colors, config, confirmAction, mode, setPrintMember }) => {
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     const todayTs = data.transactions.filter(t => t.created_at.startsWith(today));
@@ -193,12 +195,12 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, config, confirm
       <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} />
     </div>
   );
-  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={true} confirmAction={confirmAction} mode={mode} />;
+  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={true} confirmAction={confirmAction} mode={mode} setPrintMember={setPrintMember} />;
   if (view === 'agents') return <AgentManagement agents={data.agents} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} confirmAction={confirmAction} />;
   return null;
 };
 
-const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, config, mode }) => {
+const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, config, mode, setPrintMember }) => {
   const stats = useMemo(() => {
     const myTs = data.transactions.filter(t => t.employee_id === profile.id);
     const today = new Date().toISOString().slice(0, 10);
@@ -213,14 +215,14 @@ const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, config
       <TransactionList transactions={data.transactions.filter(t => t.employee_id === profile.id).slice(0, 10)} colors={colors} />
     </div>
   );
-  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={false} mode={mode} />;
+  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={false} mode={mode} setPrintMember={setPrintMember} />;
   if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} mode={mode} />;
   return null;
 };
 
 /* ===================== MEMBER LOGIC ===================== */
 
-const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, confirmAction }) => {
+const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, confirmAction, setPrintMember }) => {
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ show: false, member: null });
   const filtered = members.filter(m => (m.full_name || '').toLowerCase().includes(search.toLowerCase()) || (m.registration_no || '').includes(search));
@@ -253,7 +255,10 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
                   </div>
                 )}
               </div>
-              <button onClick={() => setForm({ show: true, member: m })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
+              <div style={{ display: 'flex', gap: 5 }}>
+                <button onClick={() => setPrintMember(m)} style={{ ...styles.iconBtn, color: colors.primary }}><Printer size={18} /></button>
+                <button onClick={() => setForm({ show: true, member: m })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
+              </div>
             </div>
           );
         })}
@@ -303,6 +308,41 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
             <button type="button" onClick={onClose} style={styles.btnSecondary}>Cancel</button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+/* ===================== PRINTING LOGIC ===================== */
+
+const PrintCard = ({ member, mode, onClose, colors }) => {
+  const qrValue = JSON.stringify({ id: member.id });
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrValue)}`;
+
+  return (
+    <div style={styles.overlay} className="no-print">
+      <div style={{ ...styles.modalBox, background: '#fff', color: '#000', padding: 0, overflow: 'hidden' }}>
+        <div id="printable-card" style={{ padding: 20, width: 300, margin: '0 auto', textAlign: 'center', border: '2px solid #3b82f6', borderRadius: 15 }}>
+          <h2 style={{ fontSize: 16, margin: '0 0 5px 0', color: colors.primary }}>{CONFIG.business.name}</h2>
+          <small style={{ display: 'block', marginBottom: 10, fontSize: 10, opacity: 0.7 }}>{mode.toUpperCase()} IDENTITY CARD</small>
+          
+          <div style={{ background: '#f8fafc', padding: 15, borderRadius: 10, marginBottom: 10 }}>
+            <img src={qrUrl} alt="QR Code" style={{ width: 140, height: 140 }} />
+          </div>
+
+          <div style={{ textAlign: 'left', fontSize: 12 }}>
+            <div style={{ marginBottom: 4 }}><strong>NAME:</strong> {member.full_name}</div>
+            <div style={{ marginBottom: 4 }}><strong>ID NO:</strong> {member.registration_no}</div>
+            <div><strong>AMOUNT:</strong> ₦{member.expected_amount.toLocaleString()}</div>
+          </div>
+          
+          <div style={{ marginTop: 15, fontSize: 9, opacity: 0.6 }}>Valid for scanning in {mode} portal</div>
+        </div>
+
+        <div style={{ padding: 20, display: 'flex', gap: 10 }}>
+          <button onClick={() => window.print()} style={{ ...styles.btnPrimary, background: colors.primary }}><Printer size={16}/> Print Card</button>
+          <button onClick={onClose} style={styles.btnSecondary}>Close</button>
+        </div>
       </div>
     </div>
   );
@@ -527,6 +567,18 @@ if (typeof document !== 'undefined') {
     @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 0.2; } 100% { opacity: 0.5; } }
     .skeleton { background: #888; animation: pulse 1.5s infinite; }
     @media (max-width: 768px) { .mobile-nav { position: fixed !important; bottom: 0; left: 0; right: 0; } }
+    @media print {
+      body * { visibility: hidden !important; }
+      #printable-card, #printable-card * { visibility: visible !important; }
+      #printable-card { 
+        position: fixed !important; 
+        left: 50% !important; 
+        top: 20% !important; 
+        transform: translateX(-50%) !important;
+        border: 2px solid #000 !important;
+      }
+      .no-print { display: none !important; }
+    }
   `;
   document.head.appendChild(s);
 }
