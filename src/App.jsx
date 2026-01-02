@@ -313,6 +313,96 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
   );
 };
 
+/* ===================== AGENT LOGIC ===================== */
+
+const AgentManagement = ({ agents, transactions, onRefresh, showToast, colors, confirmAction }) => {
+  const [form, setForm] = useState({ show: false, agent: null });
+  const stats = agents.map(a => ({ 
+    ...a, 
+    total: transactions.filter(t => t.employee_id === a.id).reduce((s, t) => s + (t.amount || 0), 0) 
+  }));
+
+  return (
+    <div>
+      <button onClick={() => setForm({ show: true, agent: null })} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15 }}>
+        <UserPlus size={18} /> New Agent
+      </button>
+
+      {form.show && (
+        <AgentForm 
+          agent={form.agent} 
+          onClose={() => setForm({ show: false, agent: null })} 
+          onSuccess={() => { setForm({ show: false, agent: null }); onRefresh(); }} 
+          showToast={showToast} colors={colors} 
+        />
+      )}
+
+      <div style={styles.list}>
+        {stats.map(a => (
+          <div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
+            <div style={{ ...styles.avatar, background: colors.primary, color: '#fff' }}>{a.full_name[0]}</div>
+            <div style={{ flex: 1 }}>
+              <strong>{a.full_name}</strong><br/>
+              <small style={styles.subtext}>ID: {a.employee_id_number} • ₦{a.total.toLocaleString()}</small>
+            </div>
+            <div style={{ display: 'flex', gap: 5 }}>
+              <button onClick={() => setForm({ show: true, agent: a })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
+              <button onClick={() => confirmAction("Delete", `Remove ${a.full_name}?`, async () => { 
+                await supabase.from('employees').delete().eq('id', a.id); 
+                onRefresh(); 
+              })} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const AgentForm = ({ agent, onClose, onSuccess, showToast, colors }) => {
+  const isEdit = !!agent;
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+      full_name: fd.get('n'),
+      employee_id_number: fd.get('id_num').trim().toLowerCase(),
+      password: fd.get('pass')
+    };
+
+    const { error } = isEdit 
+      ? await supabase.from('employees').update(payload).eq('id', agent.id)
+      : await supabase.from('employees').insert([payload]);
+
+    if (error) showToast(error.message, "error");
+    else { showToast(isEdit ? "Agent Updated" : "Agent Created", "success"); onSuccess(); }
+  };
+
+  return (
+    <div style={styles.overlay}>
+      <div style={{ ...styles.modalBox, background: colors.card }}>
+        <h3>{isEdit ? 'Edit Agent' : 'Create Agent'}</h3>
+        <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
+          <label style={{ fontSize: 10, opacity: 0.6, marginLeft: 5 }}>Full Name</label>
+          <input name="n" defaultValue={agent?.full_name} placeholder="John Doe" style={styles.input} required />
+          
+          <label style={{ fontSize: 10, opacity: 0.6, marginLeft: 5 }}>ID Number (Login Username)</label>
+          <input name="id_num" defaultValue={agent?.employee_id_number} placeholder="agent001" style={styles.input} required />
+          
+          <label style={{ fontSize: 10, opacity: 0.6, marginLeft: 5 }}>Login Password</label>
+          <input name="pass" type="text" defaultValue={agent?.password} placeholder="Secret Password" style={styles.input} required />
+          
+          <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+            <button type="submit" style={{ ...styles.btnPrimary, background: colors.primary }}>{isEdit ? 'Save Changes' : 'Register Agent'}</button>
+            <button type="button" onClick={onClose} style={styles.btnSecondary}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 /* ===================== PRINTING LOGIC ===================== */
 
 const PrintCard = ({ member, mode, onClose, colors }) => {
@@ -442,21 +532,6 @@ const AgentDashboard = ({ stats, colors }) => {
       <small>TODAY'S OPERATIONS</small>
       <h1 style={{ fontSize: 32 }}>₦{anim.toLocaleString()}</h1>
       <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}><span>{stats.count} Trans</span><span>{new Date().toLocaleDateString()}</span></div>
-    </div>
-  );
-};
-
-const AgentManagement = ({ agents, transactions, onRefresh, showToast, colors, confirmAction }) => {
-  const stats = agents.map(a => ({ ...a, total: transactions.filter(t => t.employee_id === a.id).reduce((s, t) => s + (t.amount || 0), 0) }));
-  return (
-    <div>
-      {stats.map(a => (
-        <div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-          <div style={{ ...styles.avatar, background: colors.primary, color: '#fff' }}>{a.full_name[0]}</div>
-          <div style={{ flex: 1 }}><strong>{a.full_name}</strong><br/><small>Handled: ₦{a.total.toLocaleString()}</small></div>
-          <button onClick={() => confirmAction("Delete", "Remove agent?", async () => { await supabase.from('employees').delete().eq('id', a.id); onRefresh(); })} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
-        </div>
-      ))}
     </div>
   );
 };
