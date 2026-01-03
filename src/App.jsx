@@ -87,14 +87,12 @@ export default function App() {
   const handleLogin = async (creds) => {
     setLoading(true);
     const u = creds.username.trim().toLowerCase();
-    const p = creds.password;
-
-    if (u === CONFIG.admin.username && p === CONFIG.admin.password) {
+    if (u === CONFIG.admin.username && creds.password === CONFIG.admin.password) {
       setAuth({ id: 'admin', role: 'admin', name: 'Admin' });
     } else {
-      const { data: agent } = await supabase.from('employees').select('*').eq('employee_id_number', u).eq('password', p).single();
+      const { data: agent } = await supabase.from('employees').select('*').eq('employee_id_number', u).eq('password', creds.password).single();
       if (agent) setAuth({ id: agent.id, role: 'agent', name: agent.full_name, data: agent });
-      else showToast("Incorrect Login Details", "error");
+      else showToast("Invalid Login Details", "error");
     }
     setLoading(false);
   };
@@ -103,7 +101,6 @@ export default function App() {
   const colors = theme === 'dark' ? { ...DARK_THEME, primary: activePrimary } : { ...LIGHT_THEME, primary: activePrimary };
 
   if (!auth) return <LoginScreen onLogin={handleLogin} loading={loading} theme={theme} />;
-  
   if (!mode) return <ModeSelection setMode={setMode} colors={colors} setAuth={setAuth} />;
 
   return (
@@ -150,64 +147,61 @@ export default function App() {
   );
 }
 
-/* ===================== LOGIN SCREEN (FIXED FONT) ===================== */
-
-const LoginScreen = ({ onLogin, loading, theme }) => {
-  const [type, setType] = useState('admin');
-  const colors = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
-
-  return (
-    <div style={{ ...styles.loginPage, background: colors.bg }}>
-      <div style={{ ...styles.loginCard, background: colors.card, borderColor: colors.border }}>
-        <Landmark size={48} color="#3b82f6" style={{ marginBottom: 10 }} />
-        <h2 style={{ color: colors.text, marginBottom: 20 }}>{CONFIG.business.name}</h2>
-        
-        <div style={{ display: 'flex', gap: 5, background: theme === 'dark' ? '#020617' : '#f1f5f9', padding: 4, borderRadius: 10, marginBottom: 20 }}>
-          <button onClick={() => setType('admin')} style={{ ...styles.tab, background: type === 'admin' ? '#3b82f6' : 'none', color: type === 'admin' ? '#fff' : colors.textSecondary }}>Admin</button>
-          <button onClick={() => setType('agent')} style={{ ...styles.tab, background: type === 'agent' ? '#3b82f6' : 'none', color: type === 'agent' ? '#fff' : colors.textSecondary }}>Agent</button>
-        </div>
-
-        <form onSubmit={e => { e.preventDefault(); onLogin({ username: e.target.u.value, password: e.target.p.value }); }}>
-          <input name="u" placeholder={type === 'admin' ? "Admin ID" : "Agent ID Number"} style={styles.loginInput} required />
-          <input name="p" type="password" placeholder="Password" style={styles.loginInput} required />
-          <button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: '#3b82f6', width: '100%', marginTop: 10 }}>
-            {loading ? 'Processing...' : 'Sign In'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-/* ===================== MEMBER MANAGEMENT (SHIFT-SELECT) ===================== */
+/* ===================== MEMBER MANAGEMENT (KEYBOARD + DELETE) ===================== */
 
 const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, confirmAction, setBulkPrintList }) => {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
+  const [focusedIdx, setFocusedIdx] = useState(0);
   const [form, setForm] = useState({ show: false, member: null });
-  const lastIdx = useRef(null);
+  const anchorIdx = useRef(null);
 
   const filtered = useMemo(() => 
     members.filter(m => (m.full_name || '').toLowerCase().includes(search.toLowerCase()) || (m.registration_no || '').includes(search.toUpperCase()))
   , [members, search]);
 
-  const handleRowClick = (e, m, idx) => {
-    if (!isAdmin) return;
-    let newSelection = [...selectedIds];
-    const alreadySelected = selectedIds.includes(m.id);
-
-    if (e.shiftKey && lastIdx.current !== null) {
-      const start = Math.min(idx, lastIdx.current);
-      const end = Math.max(idx, lastIdx.current);
-      const rangeIds = filtered.slice(start, end + 1).map(item => item.id);
-      newSelection = Array.from(new Set([...newSelection, ...rangeIds]));
-    } else {
-      if (alreadySelected) newSelection = newSelection.filter(id => id !== m.id);
-      else newSelection.push(m.id);
+  const handleKeyboard = (e) => {
+    if (!isAdmin || filtered.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = Math.min(focusedIdx + 1, filtered.length - 1);
+      if (e.shiftKey) {
+        const start = Math.min(anchorIdx.current ?? focusedIdx, next);
+        const end = Math.max(anchorIdx.current ?? focusedIdx, next);
+        setSelectedIds(filtered.slice(start, end + 1).map(m => m.id));
+      }
+      setFocusedIdx(next);
+    } 
+    else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = Math.max(focusedIdx - 1, 0);
+      if (e.shiftKey) {
+        const start = Math.min(anchorIdx.current ?? focusedIdx, next);
+        const end = Math.max(anchorIdx.current ?? focusedIdx, next);
+        setSelectedIds(filtered.slice(start, end + 1).map(m => m.id));
+      }
+      setFocusedIdx(next);
+    } 
+    else if (e.key === ' ') {
+      e.preventDefault();
+      const id = filtered[focusedIdx].id;
+      setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+      anchorIdx.current = focusedIdx;
     }
-    
-    lastIdx.current = idx;
-    setSelectedIds(newSelection);
+  };
+
+  const handleClick = (e, m, idx) => {
+    if (!isAdmin) return;
+    if (e.shiftKey && anchorIdx.current !== null) {
+      const start = Math.min(idx, anchorIdx.current);
+      const end = Math.max(idx, anchorIdx.current);
+      setSelectedIds(filtered.slice(start, end + 1).map(item => item.id));
+    } else {
+      const id = m.id;
+      setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+      anchorIdx.current = idx;
+    }
+    setFocusedIdx(idx);
   };
 
   const getBalance = (m) => {
@@ -216,8 +210,8 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
   };
 
   return (
-    <div style={styles.fadeIn}>
-      <SearchBar value={search} onChange={setSearch} placeholder="Search members..." colors={colors} />
+    <div style={styles.fadeIn} onKeyDown={handleKeyboard} tabIndex={0} style={{outline:'none'}}>
+      <SearchBar value={search} onChange={(val) => { setSearch(val); setFocusedIdx(0); }} placeholder="Search & Use Arrows + Shift..." colors={colors} />
       
       <div style={{ display: 'flex', gap: 10, marginBottom: 15 }}>
         {isAdmin && <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}><UserPlus size={18} /> New Member</button>}
@@ -233,8 +227,8 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
         <div style={{...styles.floatingBar, background: colors.card, borderColor: colors.primary}}>
           <span>{selectedIds.length} Selected</span>
           <div style={{display:'flex', gap: 8}}>
-            <button onClick={() => setBulkPrintList(members.filter(m => selectedIds.includes(m.id)))} style={{...styles.btnPrimary, padding: '6px 12px', fontSize: 12, background: '#10b981'}}><Printer size={14}/> Print</button>
-            <button onClick={() => setSelectedIds([])} style={{...styles.btnSecondary, padding: '6px 12px', fontSize: 12}}>Cancel</button>
+            <button onClick={() => setBulkPrintList(members.filter(m => selectedIds.includes(m.id)))} style={{...styles.btnPrimary, padding: '8px 16px', fontSize: 12, background: '#10b981'}}><Printer size={14}/> Print</button>
+            <button onClick={() => setSelectedIds([])} style={{...styles.btnSecondary, padding: '8px 16px', fontSize: 12}}>Cancel</button>
           </div>
         </div>
       )}
@@ -244,16 +238,25 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
       <div style={styles.list}>
         {filtered.map((m, idx) => {
           const isSelected = selectedIds.includes(m.id);
+          const isFocused = focusedIdx === idx;
           const balance = mode === 'loans' ? getBalance(m) : null;
           return (
-            <div key={m.id} onClick={(e) => handleRowClick(e, m, idx)} style={{ ...styles.listItem, background: colors.card, borderColor: isSelected ? colors.primary : colors.border, cursor: 'pointer', userSelect: 'none' }}>
+            <div key={m.id} onClick={(e) => handleClick(e, m, idx)} style={{ ...styles.listItem, background: isFocused ? `${colors.primary}11` : colors.card, borderColor: isSelected ? colors.primary : isFocused ? colors.primary : colors.border, cursor: 'pointer', userSelect: 'none' }}>
               {isAdmin && <div style={{marginRight: 12}}>{isSelected ? <CheckSquare size={20} color={colors.primary}/> : <Square size={20} opacity={0.2}/>}</div>}
               <div style={{ flex: 1 }}>
                 <strong>{m.full_name}</strong>
                 <div style={styles.subtext}>{m.registration_no} • ₦{m.expected_amount?.toLocaleString()}</div>
                 {mode === 'loans' && <div style={{ fontSize: 10, fontWeight:'bold', color: balance > 0 ? '#ef4444' : '#10b981' }}>Bal: ₦{balance.toLocaleString()}</div>}
               </div>
-              {isAdmin && <button onClick={(e) => { e.stopPropagation(); setForm({ show: true, member: m }); }} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>}
+              {isAdmin && (
+                <div style={{display:'flex', gap: 5}}>
+                  <button onClick={(e) => { e.stopPropagation(); setForm({ show: true, member: m }); }} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); confirmAction("Delete Member", `Delete ${m.full_name}?`, async () => {
+                    await supabase.from(CONFIG.modes[mode].membersTable).delete().eq('id', m.id);
+                    onRefresh();
+                  }); }} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -262,7 +265,7 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
   );
 };
 
-/* ===================== STYLES & PRINT ENGINE ===================== */
+/* ===================== UI STYLES (WHITE LOGIN INPUTS) ===================== */
 
 const DARK_THEME = { bg: '#020617', card: '#0f172a', text: '#f8fafc', textSecondary: '#94a3b8', border: '#1e293b' };
 const LIGHT_THEME = { bg: '#f1f5f9', card: '#ffffff', text: '#0f172a', textSecondary: '#64748b', border: '#e2e8f0' };
@@ -272,15 +275,14 @@ const styles = {
   header: { padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 },
   main: { padding: 20, paddingBottom: 100, maxWidth: 600, margin: '0 auto' },
   nav: { display: 'flex', justifyContent: 'space-around', padding: '12px 0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 },
-  listItem: { display: 'flex', alignItems: 'center', padding: 15, borderRadius: 16, border: '1px solid', marginBottom: 10 },
+  listItem: { display: 'flex', alignItems: 'center', padding: 15, borderRadius: 16, border: '1px solid', marginBottom: 10, transition: '0.15s' },
   input: { width: '100%', padding: 12, borderRadius: 10, border: '1px solid #ddd', background: 'none', color: 'inherit', marginBottom: 10, boxSizing: 'border-box' },
-  // SPECIFIC STYLE FOR LOGIN TO ENSURE WHITE TEXT
-  loginInput: { width: '100%', padding: 14, borderRadius: 12, border: '1px solid #334155', background: 'rgba(255,255,255,0.05)', color: '#ffffff', marginBottom: 12, boxSizing: 'border-box', outline: 'none', fontSize: '15px' },
+  loginInput: { width: '100%', padding: 14, borderRadius: 12, border: '1px solid #334155', background: 'rgba(255,255,255,0.05)', color: '#ffffff', marginBottom: 12, boxSizing: 'border-box', outline: 'none' },
   btnPrimary: { color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
   btnSecondary: { background: '#64748b', color: '#fff', border: 'none', borderRadius: 12, padding: 12, cursor: 'pointer' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 },
-  modalBox: { padding: 30, borderRadius: 24, textAlign: 'center' },
-  floatingBar: { position: 'fixed', bottom: 85, left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: 450, padding: '10px 20px', borderRadius: 15, border: '1px solid', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1000, boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
+  modalBox: { padding: 30, borderRadius: 24, textAlign: 'center', width: '100%' },
+  floatingBar: { position: 'fixed', bottom: 85, left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: 450, padding: '10px 20px', borderRadius: 15, border: '1px solid', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1000, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', animation: 'fadeIn 0.3s ease' },
   loginPage: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 20 },
   loginCard: { padding: 35, borderRadius: 28, width: 340, textAlign: 'center', border: '1px solid' },
   tab: { flex: 1, padding: 10, border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold' },
@@ -288,7 +290,11 @@ const styles = {
   scanBtn: { padding: '45px 20px', borderRadius: 24, width: '100%', border: '2px dashed', background: 'none', fontWeight: 'bold', fontSize: 18, cursor: 'pointer' },
   bigInput: { fontSize: 40, width: '100%', textAlign: 'center', background: 'none', border: 'none', borderBottom: '3px solid', outline: 'none' },
   fadeIn: { animation: 'fadeIn 0.4s ease' },
-  subtext: { fontSize: 12, opacity: 0.6 }
+  subtext: { fontSize: 12, opacity: 0.6 },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 },
+  statCard: { padding: 12, borderRadius: 12, border: '1px solid', textAlign: 'center' },
+  searchBar: { display: 'flex', alignItems: 'center', padding: '12px 18px', borderRadius: 15, border: '1px solid', marginBottom: 15, gap: 10 },
+  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4 }
 };
 
 if (typeof document !== 'undefined') {
@@ -296,25 +302,26 @@ if (typeof document !== 'undefined') {
   s.textContent = `
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .print-area { display: none; }
-    input::placeholder { color: #64748b !important; opacity: 0.8; }
+    input::placeholder { color: #64748b !important; }
     @media print {
       @page { size: A4; margin: 0; }
-      body { background: #fff !important; }
+      body { background: #fff !important; margin: 0; }
       .no-print { display: none !important; }
-      .print-area { display: block !important; width: 210mm; }
-      .print-grid { display: grid !important; grid-template-columns: repeat(2, 1fr); gap: 10mm; padding: 15mm; page-break-after: always; }
+      .print-area { display: block !important; width: 210mm; background: #fff; }
+      .print-grid { display: grid !important; gap: 5mm; padding: 10mm; page-break-after: always; }
+      .print-grid:last-child { page-break-after: auto; }
       .grid-1 { grid-template-columns: 1fr !important; }
       .grid-4 { grid-template-columns: repeat(2, 1fr) !important; grid-auto-rows: 110mm; }
       .grid-8 { grid-template-columns: repeat(2, 1fr) !important; grid-auto-rows: 65mm; }
       .grid-12 { grid-template-columns: repeat(3, 1fr) !important; grid-auto-rows: 60mm; }
-      .print-card { border: 1px solid #000 !important; border-radius: 4mm; padding: 5mm; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; background: #fff !important; color: #000 !important; page-break-inside: avoid; }
+      .print-card { border: 1px solid #000 !important; border-radius: 3mm; padding: 5mm; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; background: #fff !important; color: #000 !important; page-break-inside: avoid; }
       .print-card * { color: #000 !important; }
     }
   `;
   document.head.appendChild(s);
 }
 
-/* ===================== REMAINING COMPONENTS ===================== */
+/* ===================== REMAINING COMPONENTS (PORTALS, AGENTS, FORMS) ===================== */
 
 const BulkPrintConfig = ({ members, perPage, setPerPage, onClose, colors }) => (
   <div style={styles.overlay} className="no-print">
@@ -341,7 +348,11 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
   }, [data.transactions]);
   if (view === 'dashboard') return (
     <div style={styles.fadeIn}>
-      <DashboardStats stats={stats} memberCount={data.members.length} colors={colors} />
+      <div style={styles.statsGrid}>
+        <StatCard title="Today" value={`₦${useCountUp(stats.todayRev).toLocaleString()}`} colors={colors} />
+        <StatCard title="People" value={data.members.length} colors={colors} />
+        <StatCard title="Total" value={`₦${useCountUp(stats.totalRev).toLocaleString()}`} colors={colors} />
+      </div>
       <SectionHeader title="Recent Activity" icon={<TrendingUp size={20} />} />
       <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} />
     </div>
@@ -362,9 +373,9 @@ const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, mode }
       <div style={{...styles.heroCard, background: colors.primary, padding: 30, borderRadius: 24, color: '#fff', marginBottom: 20}}>
         <small>COLLECTED TODAY</small>
         <h1 style={{fontSize: 32}}>₦{useCountUp(stats.todayTotal).toLocaleString()}</h1>
-        <span>{stats.count} Operations</span>
+        <span>{stats.count} Transactions</span>
       </div>
-      <SectionHeader title="Recent Collections" icon={<Calendar size={20} />} />
+      <SectionHeader title="Your Collections" icon={<Calendar size={20} />} />
       <TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} />
     </div>
   );
@@ -403,7 +414,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
   );
   return (
     <div style={{ textAlign: 'center' }}>
-      {!scanning ? <button onClick={() => setScanning(true)} style={{...styles.scanBtn, borderColor: colors.primary, color: colors.primary}}><Camera size={32}/> Scan Pre-printed Card</button> :
+      {!scanning ? <button onClick={() => setScanning(true)} style={{...styles.scanBtn, borderColor: colors.primary, color: colors.primary}}><Camera size={32}/> Scan Card</button> :
       <div style={{ position: 'relative' }}><Scanner onScan={(r) => r?.[0] && handleScan(r[0].rawValue)} /><button onClick={() => setScanning(false)} style={{ position:'absolute', top: 10, right: 10, background: '#fff', borderRadius: '50%', padding: 5, border:'none' }}><X/></button></div>}
     </div>
   );
@@ -487,21 +498,6 @@ const NavBtn = ({ active, icon, label, onClick, colors }) => (
   <button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? colors.primary : colors.textSecondary }}>{icon}<span style={{ fontSize: 10 }}>{label}</span></button>
 );
 
-const DashboardStats = ({ stats, memberCount, colors }) => (
-  <div style={styles.statsGrid}>
-    <StatCard title="Today" value={`₦${useCountUp(stats.todayRev).toLocaleString()}`} colors={colors} />
-    <StatCard title="People" value={memberCount} colors={colors} />
-    <StatCard title="Total" value={`₦${useCountUp(stats.totalRev).toLocaleString()}`} colors={colors} />
-  </div>
-);
-
-const StatCard = ({ title, value, colors }) => (
-  <div style={{ ...styles.statCard, background: colors.card, borderColor: colors.border }}>
-    <small style={{ opacity: 0.6, fontSize: 10 }}>{title}</small>
-    <div style={{ fontSize: 14, fontWeight: 'bold' }}>{value}</div>
-  </div>
-);
-
 const TransactionList = ({ transactions, colors }) => (
   <div style={styles.list}>
     {transactions.map(t => (
@@ -558,6 +554,13 @@ const AgentForm = ({ agent, onClose, onSuccess, showToast, colors }) => {
     </div>
   );
 };
+
+const StatCard = ({ title, value, colors }) => (
+  <div style={{ ...styles.statCard, background: colors.card, borderColor: colors.border }}>
+    <small style={{ opacity: 0.6, fontSize: 10 }}>{title}</small>
+    <div style={{ fontSize: 14, fontWeight: 'bold' }}>{value}</div>
+  </div>
+);
 
 const SearchBar = ({ value, onChange, placeholder, colors }) => (
   <div style={{ ...styles.searchBar, background: colors.card, borderColor: colors.border }}>
