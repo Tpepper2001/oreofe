@@ -8,7 +8,10 @@ import {
   Wallet, HandCoins, CheckSquare, Square
 } from 'lucide-react';
 
-/* ===================== CONFIGURATION ===================== */
+/* ===================== THEMES & CONFIGURATION ===================== */
+const DARK_THEME = { bg: '#020617', card: '#0f172a', text: '#f8fafc', textSecondary: '#94a3b8', border: '#1e293b' };
+const LIGHT_THEME = { bg: '#f1f5f9', card: '#ffffff', text: '#0f172a', textSecondary: '#64748b', border: '#e2e8f0' };
+
 const CONFIG = {
   supabase: {
     url: 'https://watrosnylvkiuvuptdtp.supabase.co',
@@ -27,6 +30,34 @@ const CONFIG = {
 };
 
 const supabase = createClient(CONFIG.supabase.url, CONFIG.supabase.key);
+
+/* ===================== STYLES ===================== */
+const styles = {
+  app: { minHeight: '100vh' },
+  header: { padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 },
+  main: { padding: 20, paddingBottom: 100, maxWidth: 600, margin: '0 auto' },
+  nav: { display: 'flex', justifyContent: 'space-around', padding: '12px 0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 },
+  listItem: { display: 'flex', alignItems: 'center', padding: 15, borderRadius: 16, border: '1px solid', marginBottom: 10, transition: '0.15s' },
+  input: { width: '100%', padding: 12, borderRadius: 10, border: '1px solid #ddd', background: 'none', color: 'inherit', marginBottom: 10, boxSizing: 'border-box' },
+  loginInput: { width: '100%', padding: 14, borderRadius: 12, border: '1px solid #334155', background: '#1e293b', color: '#ffffff', marginBottom: 12, boxSizing: 'border-box', outline: 'none' },
+  btnPrimary: { color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  btnSecondary: { background: '#64748b', color: '#fff', border: 'none', borderRadius: 12, padding: 12, cursor: 'pointer' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 },
+  modalBox: { padding: 30, borderRadius: 24, textAlign: 'center', width: '100%' },
+  floatingBar: { position: 'fixed', bottom: 85, left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: 450, padding: '10px 20px', borderRadius: 15, border: '1px solid', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1000, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', animation: 'fadeIn 0.3s ease' },
+  loginPage: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 20 },
+  loginCard: { padding: 35, borderRadius: 28, width: 340, textAlign: 'center', border: '1px solid' },
+  tab: { flex: 1, padding: 10, border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold' },
+  smallGhostBtn: { background: 'none', border: '1px solid #334155', color: 'inherit', borderRadius: 8, padding: '5px 10px', fontSize: 10, cursor: 'pointer' },
+  scanBtn: { padding: '45px 20px', borderRadius: 24, width: '100%', border: '2px dashed', background: 'none', fontWeight: 'bold', fontSize: 18, cursor: 'pointer' },
+  bigInput: { fontSize: 40, width: '100%', textAlign: 'center', background: 'none', border: 'none', borderBottom: '3px solid', outline: 'none' },
+  fadeIn: { animation: 'fadeIn 0.4s ease' },
+  subtext: { fontSize: 12, opacity: 0.6 },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 },
+  statCard: { padding: 12, borderRadius: 12, border: '1px solid', textAlign: 'center' },
+  searchBar: { display: 'flex', alignItems: 'center', padding: '12px 18px', borderRadius: 15, border: '1px solid', marginBottom: 15, gap: 10 },
+  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4 }
+};
 
 /* ===================== UTILS ===================== */
 const useCountUp = (end, duration = 1000) => {
@@ -92,7 +123,7 @@ export default function App() {
     } else {
       const { data: agent } = await supabase.from('employees').select('*').eq('employee_id_number', u).eq('password', creds.password).single();
       if (agent) setAuth({ id: agent.id, role: 'agent', name: agent.full_name, data: agent });
-      else showToast("Invalid Login Details", "error");
+      else showToast("Invalid Details", "error");
     }
     setLoading(false);
   };
@@ -147,7 +178,29 @@ export default function App() {
   );
 }
 
-/* ===================== MEMBER MANAGEMENT (KEYBOARD + DELETE) ===================== */
+/* ===================== COMPONENTS ===================== */
+
+const LoginScreen = ({ onLogin, loading, theme }) => {
+  const [type, setType] = useState('admin');
+  const colors = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
+  return (
+    <div style={styles.loginPage}>
+      <div style={{ ...styles.loginCard, background: colors.card, borderColor: colors.border }}>
+        <Landmark size={48} color="#3b82f6" style={{ marginBottom: 10 }} />
+        <h2 style={{ color: colors.text, marginBottom: 20 }}>{CONFIG.business.name}</h2>
+        <div style={{ display: 'flex', gap: 5, background: theme === 'dark' ? '#020617' : '#f1f5f9', padding: 4, borderRadius: 10, marginBottom: 20 }}>
+          <button onClick={() => setType('admin')} style={{ ...styles.tab, background: type === 'admin' ? '#3b82f6' : 'none', color: type === 'admin' ? '#fff' : colors.textSecondary }}>Admin</button>
+          <button onClick={() => setType('agent')} style={{ ...styles.tab, background: type === 'agent' ? '#3b82f6' : 'none', color: type === 'agent' ? '#fff' : colors.textSecondary }}>Agent</button>
+        </div>
+        <form onSubmit={e => { e.preventDefault(); onLogin({ username: e.target.u.value, password: e.target.p.value }); }}>
+          <input name="u" placeholder={type === 'admin' ? "Admin ID" : "Agent ID"} style={styles.loginInput} required />
+          <input name="p" type="password" placeholder="Password" style={styles.loginInput} required />
+          <button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: '#3b82f6', width: '100%', marginTop: 10 }}>Login</button>
+        </form>
+      </div>
+    </div>
+  );
+};
 
 const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, confirmAction, setBulkPrintList }) => {
   const [search, setSearch] = useState('');
@@ -210,14 +263,13 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
   };
 
   return (
-    <div style={styles.fadeIn} onKeyDown={handleKeyboard} tabIndex={0} style={{outline:'none'}}>
-      <SearchBar value={search} onChange={(val) => { setSearch(val); setFocusedIdx(0); }} placeholder="Search & Use Arrows + Shift..." colors={colors} />
-      
+    <div style={styles.fadeIn} onKeyDown={handleKeyboard} tabIndex={0}>
+      <SearchBar value={search} onChange={setSearch} placeholder="Search members..." colors={colors} />
       <div style={{ display: 'flex', gap: 10, marginBottom: 15 }}>
-        {isAdmin && <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}><UserPlus size={18} /> New Member</button>}
+        {isAdmin && <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>+ New</button>}
         {isAdmin && (
           <div style={{display:'flex', gap:5}}>
-            <button onClick={() => setSelectedIds(filtered.map(m => m.id))} style={styles.smallGhostBtn}>Select All</button>
+            <button onClick={() => setSelectedIds(filtered.map(m => m.id))} style={styles.smallGhostBtn}>All</button>
             <button onClick={() => setSelectedIds([])} style={styles.smallGhostBtn}>Clear</button>
           </div>
         )}
@@ -245,16 +297,13 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
               {isAdmin && <div style={{marginRight: 12}}>{isSelected ? <CheckSquare size={20} color={colors.primary}/> : <Square size={20} opacity={0.2}/>}</div>}
               <div style={{ flex: 1 }}>
                 <strong>{m.full_name}</strong>
-                <div style={styles.subtext}>{m.registration_no} • ₦{m.expected_amount?.toLocaleString()}</div>
+                <div style={styles.subtext}>{m.registration_no} • ₦{m.expected_amount}</div>
                 {mode === 'loans' && <div style={{ fontSize: 10, fontWeight:'bold', color: balance > 0 ? '#ef4444' : '#10b981' }}>Bal: ₦{balance.toLocaleString()}</div>}
               </div>
               {isAdmin && (
                 <div style={{display:'flex', gap: 5}}>
                   <button onClick={(e) => { e.stopPropagation(); setForm({ show: true, member: m }); }} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); confirmAction("Delete Member", `Delete ${m.full_name}?`, async () => {
-                    await supabase.from(CONFIG.modes[mode].membersTable).delete().eq('id', m.id);
-                    onRefresh();
-                  }); }} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); confirmAction("Delete Member", `Delete ${m.full_name}?`, async () => { await supabase.from(CONFIG.modes[mode].membersTable).delete().eq('id', m.id); onRefresh(); }); }} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
                 </div>
               )}
             </div>
@@ -265,81 +314,7 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
   );
 };
 
-/* ===================== UI STYLES (WHITE LOGIN INPUTS) ===================== */
-
-const DARK_THEME = { bg: '#020617', card: '#0f172a', text: '#f8fafc', textSecondary: '#94a3b8', border: '#1e293b' };
-const LIGHT_THEME = { bg: '#f1f5f9', card: '#ffffff', text: '#0f172a', textSecondary: '#64748b', border: '#e2e8f0' };
-
-const styles = {
-  app: { minHeight: '100vh' },
-  header: { padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 },
-  main: { padding: 20, paddingBottom: 100, maxWidth: 600, margin: '0 auto' },
-  nav: { display: 'flex', justifyContent: 'space-around', padding: '12px 0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 },
-  listItem: { display: 'flex', alignItems: 'center', padding: 15, borderRadius: 16, border: '1px solid', marginBottom: 10, transition: '0.15s' },
-  input: { width: '100%', padding: 12, borderRadius: 10, border: '1px solid #ddd', background: 'none', color: 'inherit', marginBottom: 10, boxSizing: 'border-box' },
-  loginInput: { width: '100%', padding: 14, borderRadius: 12, border: '1px solid #334155', background: 'rgba(255,255,255,0.05)', color: '#ffffff', marginBottom: 12, boxSizing: 'border-box', outline: 'none' },
-  btnPrimary: { color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  btnSecondary: { background: '#64748b', color: '#fff', border: 'none', borderRadius: 12, padding: 12, cursor: 'pointer' },
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 },
-  modalBox: { padding: 30, borderRadius: 24, textAlign: 'center', width: '100%' },
-  floatingBar: { position: 'fixed', bottom: 85, left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: 450, padding: '10px 20px', borderRadius: 15, border: '1px solid', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1000, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', animation: 'fadeIn 0.3s ease' },
-  loginPage: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 20 },
-  loginCard: { padding: 35, borderRadius: 28, width: 340, textAlign: 'center', border: '1px solid' },
-  tab: { flex: 1, padding: 10, border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold' },
-  smallGhostBtn: { background: 'none', border: '1px solid #334155', color: 'inherit', borderRadius: 8, padding: '5px 10px', fontSize: 10, cursor: 'pointer' },
-  scanBtn: { padding: '45px 20px', borderRadius: 24, width: '100%', border: '2px dashed', background: 'none', fontWeight: 'bold', fontSize: 18, cursor: 'pointer' },
-  bigInput: { fontSize: 40, width: '100%', textAlign: 'center', background: 'none', border: 'none', borderBottom: '3px solid', outline: 'none' },
-  fadeIn: { animation: 'fadeIn 0.4s ease' },
-  subtext: { fontSize: 12, opacity: 0.6 },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 },
-  statCard: { padding: 12, borderRadius: 12, border: '1px solid', textAlign: 'center' },
-  searchBar: { display: 'flex', alignItems: 'center', padding: '12px 18px', borderRadius: 15, border: '1px solid', marginBottom: 15, gap: 10 },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4 }
-};
-
-if (typeof document !== 'undefined') {
-  const s = document.createElement('style');
-  s.textContent = `
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .print-area { display: none; }
-    input::placeholder { color: #64748b !important; }
-    @media print {
-      @page { size: A4; margin: 0; }
-      body { background: #fff !important; margin: 0; }
-      .no-print { display: none !important; }
-      .print-area { display: block !important; width: 210mm; background: #fff; }
-      .print-grid { display: grid !important; gap: 5mm; padding: 10mm; page-break-after: always; }
-      .print-grid:last-child { page-break-after: auto; }
-      .grid-1 { grid-template-columns: 1fr !important; }
-      .grid-4 { grid-template-columns: repeat(2, 1fr) !important; grid-auto-rows: 110mm; }
-      .grid-8 { grid-template-columns: repeat(2, 1fr) !important; grid-auto-rows: 65mm; }
-      .grid-12 { grid-template-columns: repeat(3, 1fr) !important; grid-auto-rows: 60mm; }
-      .print-card { border: 1px solid #000 !important; border-radius: 3mm; padding: 5mm; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; background: #fff !important; color: #000 !important; page-break-inside: avoid; }
-      .print-card * { color: #000 !important; }
-    }
-  `;
-  document.head.appendChild(s);
-}
-
-/* ===================== REMAINING COMPONENTS (PORTALS, AGENTS, FORMS) ===================== */
-
-const BulkPrintConfig = ({ members, perPage, setPerPage, onClose, colors }) => (
-  <div style={styles.overlay} className="no-print">
-    <div style={{ ...styles.modalBox, background: colors.card, maxWidth: 400 }}>
-      <h3>Bulk Print Identity Cards</h3>
-      <p style={{fontSize: 12, opacity: 0.7, marginBottom: 20}}>Print {members.length} items</p>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-        {[1, 4, 8, 12].map(n => (
-          <button key={n} onClick={() => setPerPage(n)} style={{ padding: 12, borderRadius: 10, border: '1px solid', background: perPage === n ? colors.primary : 'none', color: perPage === n ? '#fff' : colors.text, borderColor: colors.primary }}>{n} Per A4</button>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={() => { setTimeout(() => window.print(), 500); }} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>Start Print</button>
-        <button onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button>
-      </div>
-    </div>
-  </div>
-);
+/* ===================== OTHER VIEWS ===================== */
 
 const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPrintList, confirmAction }) => {
   const stats = useMemo(() => {
@@ -348,11 +323,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
   }, [data.transactions]);
   if (view === 'dashboard') return (
     <div style={styles.fadeIn}>
-      <div style={styles.statsGrid}>
-        <StatCard title="Today" value={`₦${useCountUp(stats.todayRev).toLocaleString()}`} colors={colors} />
-        <StatCard title="People" value={data.members.length} colors={colors} />
-        <StatCard title="Total" value={`₦${useCountUp(stats.totalRev).toLocaleString()}`} colors={colors} />
-      </div>
+      <DashboardStats stats={stats} memberCount={data.members.length} colors={colors} />
       <SectionHeader title="Recent Activity" icon={<TrendingUp size={20} />} />
       <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} />
     </div>
@@ -474,6 +445,24 @@ const ModeSelection = ({ setMode, colors, setAuth }) => (
   </div>
 );
 
+const BulkPrintConfig = ({ members, perPage, setPerPage, onClose, colors }) => (
+  <div style={styles.overlay} className="no-print">
+    <div style={{ ...styles.modalBox, background: colors.card, maxWidth: 400 }}>
+      <h3>Bulk Print Identity Cards</h3>
+      <p style={{fontSize: 12, opacity: 0.7, marginBottom: 20}}>Print {members.length} items</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+        {[1, 4, 8, 12].map(n => (
+          <button key={n} onClick={() => setPerPage(n)} style={{ padding: 12, borderRadius: 10, border: '1px solid', background: perPage === n ? colors.primary : 'none', color: perPage === n ? '#fff' : colors.text, borderColor: colors.primary }}>{n} Per A4</button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={() => { setTimeout(() => window.print(), 500); }} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>Start Print</button>
+        <button onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button>
+      </div>
+    </div>
+  </div>
+);
+
 const Header = ({ business, role, isDark, onToggleTheme, onSwitchMode, colors }) => (
   <header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -496,6 +485,21 @@ const Navigation = ({ view, role, onNavigate, onLogout, colors }) => (
 
 const NavBtn = ({ active, icon, label, onClick, colors }) => (
   <button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? colors.primary : colors.textSecondary }}>{icon}<span style={{ fontSize: 10 }}>{label}</span></button>
+);
+
+const DashboardStats = ({ stats, memberCount, colors }) => (
+  <div style={styles.statsGrid}>
+    <StatCard title="Today" value={`₦${useCountUp(stats.todayRev).toLocaleString()}`} colors={colors} />
+    <StatCard title="People" value={memberCount} colors={colors} />
+    <StatCard title="Total" value={`₦${useCountUp(stats.totalRev).toLocaleString()}`} colors={colors} />
+  </div>
+);
+
+const StatCard = ({ title, value, colors }) => (
+  <div style={{ ...styles.statCard, background: colors.card, borderColor: colors.border }}>
+    <small style={{ opacity: 0.6, fontSize: 10 }}>{title}</small>
+    <div style={{ fontSize: 14, fontWeight: 'bold' }}>{value}</div>
+  </div>
 );
 
 const TransactionList = ({ transactions, colors }) => (
@@ -555,13 +559,6 @@ const AgentForm = ({ agent, onClose, onSuccess, showToast, colors }) => {
   );
 };
 
-const StatCard = ({ title, value, colors }) => (
-  <div style={{ ...styles.statCard, background: colors.card, borderColor: colors.border }}>
-    <small style={{ opacity: 0.6, fontSize: 10 }}>{title}</small>
-    <div style={{ fontSize: 14, fontWeight: 'bold' }}>{value}</div>
-  </div>
-);
-
 const SearchBar = ({ value, onChange, placeholder, colors }) => (
   <div style={{ ...styles.searchBar, background: colors.card, borderColor: colors.border }}>
     <Search size={18} opacity={0.5} />
@@ -592,3 +589,28 @@ const SkeletonLoader = () => (
     <div className="skeleton" style={{ height: 150, borderRadius: 12 }}></div>
   </div>
 );
+
+if (typeof document !== 'undefined') {
+  const s = document.createElement('style');
+  s.textContent = `
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .print-area { display: none; }
+    @media print {
+      @page { size: A4; margin: 0; }
+      body { background: #fff !important; margin: 0; }
+      .no-print { display: none !important; }
+      .print-area { display: block !important; width: 210mm; background: #fff; }
+      .print-grid { display: grid !important; gap: 5mm; padding: 10mm; page-break-after: always; }
+      .print-grid:last-child { page-break-after: auto; }
+      .grid-1 { grid-template-columns: 1fr !important; }
+      .grid-4 { grid-template-columns: 1fr 1fr !important; grid-auto-rows: 120mm; }
+      .grid-8 { grid-template-columns: 1fr 1fr !important; grid-auto-rows: 65mm; }
+      .grid-12 { grid-template-columns: 1fr 1fr 1fr !important; grid-auto-rows: 65mm; }
+      .print-card { border: 1px solid #000 !important; border-radius: 3mm; padding: 5mm; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; background: #fff !important; color: #000 !important; page-break-inside: avoid; }
+      .print-card * { color: #000 !important; }
+    }
+    .skeleton { background: #8882; animation: pulse 1.5s infinite; border-radius: 12px; }
+    @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 0.2; } 100% { opacity: 0.5; } }
+  `;
+  document.head.appendChild(s);
+}
