@@ -41,8 +41,8 @@ const styles = {
   listItem: { display: 'flex', alignItems: 'center', padding: 16, borderRadius: 18, border: '1px solid', marginBottom: 10 },
   btnPrimary: { color: '#fff', border: 'none', borderRadius: 14, padding: '14px 24px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontSize: 15 },
   btnSecondary: { background: '#64748b', color: '#fff', border: 'none', borderRadius: 14, padding: 12, cursor: 'pointer', fontWeight: '600' },
-  input: { width: '100%', padding: '14px 16px', borderRadius: 12, border: '1px solid', background: 'rgba(255,255,255,0.02)', color: 'inherit', fontSize: 16, outline: 'none', boxSizing: 'border-box' },
-  bigInput: { fontSize: 42, width: '100%', textAlign: 'center', background: 'none', border: 'none', borderBottom: '3px solid', outline: 'none', fontWeight: '800', margin: '20px 0' },
+  input: { width: '100%', padding: '14px 16px', borderRadius: 12, border: '1px solid', background: 'rgba(255,255,255,0.05)', color: '#ffffff', fontSize: 16, outline: 'none', boxSizing: 'border-box' },
+  bigInput: { fontSize: 42, width: '100%', textAlign: 'center', background: 'none', border: 'none', borderBottom: '3px solid', outline: 'none', fontWeight: '800', margin: '20px 0', color: '#ffffff' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20, backdropFilter: 'blur(4px)' },
   modal: { padding: 30, borderRadius: 28, width: '100%', maxWidth: 400 },
   scanContainer: { position: 'fixed', inset: 0, background: '#000', zIndex: 2000, display: 'flex', flexDirection: 'column' }
@@ -76,13 +76,27 @@ export default function App() {
         supabase.from('employees').select('*').order('full_name')
       ]);
       setData({ members: m.data || [], transactions: t.data || [], agents: e.data || [] });
-      // Offline Cache
       localStorage.setItem(`cache_members_${mode}`, JSON.stringify(m.data || []));
     } catch (err) { showToast("Sync failed", "error"); }
     finally { setLoading(false); }
   }, [auth, mode, showToast]);
 
   useEffect(() => { if (auth && mode) fetchData(); }, [auth, mode, fetchData]);
+
+  const handleLogin = async (creds) => {
+    setLoading(true);
+    if (creds.type === 'admin') {
+      if (creds.u.toLowerCase() === CONFIG.admin.username && creds.p === CONFIG.admin.password) {
+        setAuth({ id: 'admin', role: 'admin', name: 'Admin' });
+      } else { showToast("Invalid Admin Login", "error"); }
+      setLoading(false);
+    } else {
+      const { data: agent } = await supabase.from('employees').select('*').eq('employee_id_number', creds.u.toLowerCase()).eq('password', creds.p).maybeSingle();
+      if (agent) setAuth({ id: agent.id, role: 'agent', name: agent.full_name, data: agent });
+      else showToast("Invalid Agent Login", "error");
+      setLoading(false);
+    }
+  };
 
   const colors = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
   const primaryColor = mode ? CONFIG.modes[mode].primary : '#3b82f6';
@@ -93,30 +107,19 @@ export default function App() {
       @keyframes scan-line { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       .scanner-overlay { position: absolute; inset: 0; z-index: 10; box-shadow: 0 0 0 4000px rgba(0,0,0,0.7); border: 2px solid rgba(255,255,255,0.3); border-radius: 24px; }
-      .scanner-overlay.error { border-color: #ef4444; }
       .scanner-laser { position: absolute; width: 100%; height: 3px; background: #ef4444; box-shadow: 0 0 15px #ef4444; animation: scan-line 2s linear infinite; z-index: 11; }
+      input::placeholder { color: rgba(255,255,255,0.4); }
       @media print {
         .no-print { display: none !important; }
         .print-area { display: block !important; width: 210mm; }
         .print-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10mm; padding: 10mm; }
-        .print-card { border: 1px solid #000; border-radius: 5mm; padding: 10mm; text-align: center; }
+        .print-card { border: 1px solid #000; border-radius: 5mm; padding: 10mm; text-align: center; color: #000 !important; }
       }
     `;
     document.head.appendChild(s);
   }, []);
 
-  if (!auth) return <LoginScreen onLogin={(c) => {
-    if (c.u === CONFIG.admin.username && c.p === CONFIG.admin.password) setAuth({ id: 'admin', role: 'admin', name: 'Admin' });
-    else {
-      setLoading(true);
-      supabase.from('employees').select('*').eq('employee_id_number', c.u.toLowerCase()).eq('password', c.p).maybeSingle().then(({data}) => {
-        if (data) setAuth({ id: data.id, role: 'agent', name: data.full_name, data });
-        else showToast("Invalid login", "error");
-        setLoading(false);
-      });
-    }
-  }} loading={loading} colors={colors} />;
-
+  if (!auth) return <LoginScreen onLogin={handleLogin} loading={loading} colors={colors} />;
   if (!mode) return <ModeSelection setMode={setMode} colors={colors} onLogout={() => setAuth(null)} />;
 
   return (
@@ -159,7 +162,36 @@ export default function App() {
   );
 }
 
-/* ===================== SCANNER COMPONENT (ADVANCED) ===================== */
+/* ===================== LOGIN SCREEN (WITH TOGGLE & WHITE INPUTS) ===================== */
+
+const LoginScreen = ({ onLogin, loading, colors }) => {
+  const [type, setType] = useState('agent');
+  const tabStyle = (active) => ({ flex: 1, padding: 12, border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 'bold', background: active ? '#3b82f6' : 'none', color: active ? '#fff' : '#64748b' });
+
+  return (
+    <div style={{ background: colors.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ ...styles.modal, background: colors.card, border: `1px solid ${colors.border}`, textAlign: 'center' }}>
+        <Landmark size={48} color="#3b82f6" style={{ marginBottom: 10 }} />
+        <h2 style={{ color: colors.text, marginBottom: 25, letterSpacing: -1 }}>{CONFIG.business.name}</h2>
+        
+        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: 4, borderRadius: 14, marginBottom: 25, border: `1px solid ${colors.border}` }}>
+          <button onClick={() => setType('agent')} style={tabStyle(type === 'agent')}>Agent</button>
+          <button onClick={() => setType('admin')} style={tabStyle(type === 'admin')}>Admin</button>
+        </div>
+
+        <form onSubmit={e => { e.preventDefault(); onLogin({ u: e.target.u.value, p: e.target.p.value, type }); }}>
+          <input name="u" placeholder={type === 'admin' ? "Username" : "Agent ID"} style={{ ...styles.input, marginBottom: 10, border: `1px solid ${colors.border}` }} required />
+          <input name="p" type="password" placeholder="Password" style={{ ...styles.input, marginBottom: 20, border: `1px solid ${colors.border}` }} required />
+          <button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: '#3b82f6', width: '100%', height: 55 }}>
+            {loading ? "Authenticating..." : `Login as ${type}`}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+/* ===================== SCANNER COMPONENT (WHITE INPUTS) ===================== */
 
 const ScannerView = ({ profile, onRefresh, showToast, colors, primary, mode }) => {
   const [active, setActive] = useState(false);
@@ -168,104 +200,56 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, primary, mode }) =
   const [member, setMember] = useState(null);
   const [amount, setAmount] = useState('');
   const [processing, setProcessing] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  const [scanError, setScanError] = useState(null);
   
   const scanLock = useRef(false);
-  const timeoutRef = useRef(null);
-
-  // Auto-close scanner after 2 minutes of inactivity
-  useEffect(() => {
-    if (active) {
-      timeoutRef.current = setTimeout(() => {
-        setActive(false);
-        showToast("Scanner timed out", "info");
-      }, 120000);
-    }
-    return () => clearTimeout(timeoutRef.current);
-  }, [active, showToast]);
 
   const lookupMember = async (id) => {
-    if (!id || scanLock.current || processing) return;
+    if (!id || scanLock.current) return;
     scanLock.current = true;
-    setIsSearching(true);
-    setScanError(null);
-
-    try {
-      let m = null;
-      // Offline Fallback
-      if (!navigator.onLine) {
-        const cache = JSON.parse(localStorage.getItem(`cache_members_${mode}`) || '[]');
-        m = cache.find(x => x.registration_no === id.toUpperCase() || x.id === id);
-      } else {
-        const { data } = await supabase.from(CONFIG.modes[mode].membersTable).select('*')
-          .or(`registration_no.eq.${id.toUpperCase()},id.eq.${id}`).maybeSingle();
-        m = data;
-      }
-
-      if (m) {
-        if (navigator.vibrate) navigator.vibrate(100);
-        setMember(m);
-        setAmount(m.expected_amount || '');
-        setActive(false);
-        setTorchOn(false);
-      } else {
-        setScanError("Not Found");
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-      }
-    } catch (err) { setScanError("Error"); }
-    finally {
-      setIsSearching(false);
-      setTimeout(() => { scanLock.current = false; }, 2000);
-    }
-  };
-
-  const handleTransaction = async () => {
-    if (!amount || amount <= 0) return;
-    setProcessing(true);
-    const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([{ 
-      contributor_id: member.id, full_name: member.full_name, registration_no: member.registration_no,
-      amount: Number(amount), employee_id: profile?.id, employee_name: profile?.full_name, expected_amount: member.expected_amount
-    }]);
-    if (!error) { showToast("Saved", "success"); setMember(null); onRefresh(); }
-    else showToast("Failed to save", "error");
-    setProcessing(false);
+    const { data: m } = await supabase.from(CONFIG.modes[mode].membersTable).select('*').or(`registration_no.eq.${id.toUpperCase()},id.eq.${id}`).maybeSingle();
+    if (m) {
+      if (navigator.vibrate) navigator.vibrate(100);
+      setMember(m);
+      setAmount(m.expected_amount || '');
+      setActive(false);
+      setTorchOn(false);
+    } else showToast("Member not found", "error");
+    setTimeout(() => { scanLock.current = false; }, 2000);
   };
 
   if (member) return (
-    <div style={{ ...styles.card, background: colors.card, borderColor: colors.border, textAlign: 'center', paddingTop: 40, animation: 'fadeIn 0.3s' }}>
+    <div style={{ ...styles.card, background: colors.card, textAlign: 'center', paddingTop: 40, animation: 'fadeIn 0.3s' }}>
       <button onClick={() => setMember(null)} style={{ position:'absolute', top: 20, right: 20, background:'none', border:'none', color:colors.textSecondary }}><X/></button>
       <div style={{ background: primary, color: '#fff', display: 'inline-block', padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 'bold' }}>{member.registration_no}</div>
       <h2 style={{ margin: '15px 0 5px' }}>{member.full_name}</h2>
-      <input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={{ ...styles.bigInput, color: colors.text, borderBottomColor: primary }} autoFocus />
-      <button onClick={handleTransaction} disabled={processing} style={{ ...styles.btnPrimary, background: primary, width: '100%', height: 60 }}>{processing ? "Saving..." : "Confirm Collection"}</button>
+      <input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={styles.bigInput} autoFocus />
+      <button onClick={async () => {
+        setProcessing(true);
+        const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([{ contributor_id: member.id, full_name: member.full_name, registration_no: member.registration_no, amount: Number(amount), employee_id: profile?.id, employee_name: profile?.full_name, expected_amount: member.expected_amount }]);
+        if (!error) { showToast("Success", "success"); setMember(null); onRefresh(); }
+        setProcessing(false);
+      }} disabled={processing} style={{ ...styles.btnPrimary, background: primary, width: '100%', height: 60 }}>
+        {processing ? "Saving..." : "Confirm Collection"}
+      </button>
     </div>
   );
 
   if (active) return (
     <div style={styles.scanContainer}>
-      <div style={{ padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)', zIndex: 2001 }}>
-        <div>
-          <h3 style={{ color: '#fff', margin: 0 }}>Scan QR Code</h3>
-          {scanError && <small style={{color: '#ef4444', fontWeight: 'bold'}}>{scanError}</small>}
-        </div>
-        <button onClick={() => { setActive(false); setTorchOn(false); }} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', padding: 10, borderRadius: '50%' }}><X/></button>
+      <div style={{ padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', zIndex: 2001 }}>
+        <h3 style={{ color: '#fff', margin: 0 }}>Scan QR Code</h3>
+        <button onClick={() => { setActive(false); setTorchOn(false); }} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 45, height: 45, borderRadius: '50%' }}><X/></button>
       </div>
       <div style={{ flex: 1, position: 'relative' }}>
-        <Scanner 
-          onScan={(res) => res?.[0] && lookupMember(res[0].rawValue)} 
-          styles={{ container: { width: '100%', height: '100%' } }} 
-          components={{ finder: false, audio: false }}
-          constraints={{ facingMode: 'environment', advanced: [{ torch: torchOn }] }}
-        />
+        <Scanner onScan={(res) => res?.[0] && lookupMember(res[0].rawValue)} styles={{ container: { width: '100%', height: '100%' } }} components={{ finder: false, audio: false }} constraints={{ facingMode: 'environment', advanced: [{ torch: torchOn }] }} />
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <div style={{ width: 250, height: 250, position: 'relative' }}>
-            <div className={`scanner-overlay ${scanError ? 'error' : ''}`}></div>
-            {!scanError && <div className="scanner-laser"></div>}
+            <div className="scanner-overlay"></div>
+            <div className="scanner-laser"></div>
           </div>
         </div>
         <div style={{ position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 2002 }}>
-          <button onClick={() => setTorchOn(!torchOn)} style={{ width: 64, height: 64, borderRadius: '50%', background: torchOn ? '#fbbf24' : 'rgba(255,255,255,0.2)', border: 'none', color: torchOn ? '#000' : '#fff', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 15px rgba(0,0,0,0.3)' }}>
+          <button onClick={() => setTorchOn(!torchOn)} style={{ width: 64, height: 64, borderRadius: '50%', background: torchOn ? '#fbbf24' : 'rgba(255,255,255,0.2)', border: 'none', color: torchOn ? '#000' : '#fff', display:'flex', alignItems:'center', justifyContent:'center' }}>
             {torchOn ? <ZapOff size={28} /> : <Zap size={28} />}
           </button>
         </div>
@@ -278,23 +262,18 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, primary, mode }) =
       <div style={{ ...styles.card, background: colors.card, borderColor: colors.border, padding: '60px 20px', textAlign: 'center' }}>
         <div style={{ width: 80, height: 80, borderRadius: '50%', background: primary + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', color: primary }}><Camera size={40}/></div>
         <h2 style={{ margin: '0 0 10px 0' }}>Daily Collection</h2>
-        <button onClick={() => setActive(true)} style={{ ...styles.btnPrimary, background: primary, width: '100%', height: 60, fontSize: 18, marginBottom: 15 }}><QrCode/> Begin Scanning</button>
+        <button onClick={() => setActive(true)} style={{ ...styles.btnPrimary, background: primary, width: '100%', height: 60, fontSize: 18, marginBottom: 15 }}><QrCode/> Open Scanner</button>
       </div>
       <div style={{ textAlign: 'center', margin: '20px 0', fontSize: 12, opacity: 0.4, fontWeight: 'bold' }}>OR ENTER MANUALLY</div>
       <div style={{ display: 'flex', gap: 10 }}>
-        <input placeholder="Member ID" value={manualId} onChange={e => setManualId(e.target.value)} style={{ ...styles.input, borderColor: colors.border, background: colors.card }} />
+        <input placeholder="Member ID" value={manualId} onChange={e => setManualId(e.target.value)} style={{ ...styles.input, borderColor: colors.border }} />
         <button onClick={() => lookupMember(manualId)} style={{ ...styles.btnPrimary, background: primary, padding: '0 20px' }}><ChevronRight/></button>
       </div>
-      {!navigator.onLine && (
-        <div style={{ marginTop: 20, padding: 12, background: '#fef3c7', color: '#92400e', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-          <AlertCircle size={16}/> Offline Mode: Results from local cache.
-        </div>
-      )}
     </div>
   );
 };
 
-/* ===================== OTHER UI PARTS ===================== */
+/* ===================== SHARED COMPONENTS ===================== */
 
 const NavBtn = ({ active, icon, label, onClick, colors, primary }) => (
   <button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? primary : colors.textSecondary }}>
@@ -343,7 +322,7 @@ const AgentPortal = ({ view, profile, data, colors, primary, mode, onRefresh, sh
         <div style={{ ...styles.card, background: primary, color: '#fff', textAlign: 'center', padding: 40, border: 'none' }}>
           <small style={{ opacity: 0.8 }}>MY COLLECTIONS TODAY</small>
           <h1 style={{ fontSize: 42, margin: '10px 0' }}>₦{myTs.reduce((s, t) => s + (t.amount || 0), 0).toLocaleString()}</h1>
-          <div style={{ background: 'rgba(0,0,0,0.1)', display: 'inline-block', padding: '4px 12px', borderRadius: 20 }}>{myTs.length} People Processed</div>
+          <div style={{ background: 'rgba(0,0,0,0.1)', display: 'inline-block', padding: '4px 12px', borderRadius: 20 }}>{myTs.length} Records</div>
         </div>
         <h3 style={{ marginBottom: 15 }}><Calendar size={18}/> My Recent Activity</h3>
         <TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} primary={primary} />
@@ -363,13 +342,13 @@ const MemberManager = ({ data, colors, primary, mode, onRefresh, showToast, setB
   return (
     <div>
       <div style={{ display: 'flex', gap: 10, background: colors.card, padding: 12, borderRadius: 16, border: `1px solid ${colors.border}`, marginBottom: 15, alignItems: 'center' }}>
-        <Search size={18} opacity={0.5}/><input placeholder="Search members..." value={query} onChange={e => setQuery(e.target.value)} style={{ border: 'none', background: 'none', color: 'inherit', outline: 'none', flex: 1 }} />
+        <Search size={18} opacity={0.5}/><input placeholder="Search members..." value={query} onChange={e => setQuery(e.target.value)} style={{ border: 'none', background: 'none', color: '#ffffff', outline: 'none', flex: 1 }} />
       </div>
       {isAdmin && <button onClick={() => setForm({ show: true, m: null })} style={{ ...styles.btnPrimary, background: primary, width: '100%', marginBottom: 15 }}><UserPlus size={18}/> Add New Member</button>}
       {selected.length > 0 && (
         <div style={{ position:'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: 400, background: primary, padding: 15, borderRadius: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1000 }}>
           <span style={{ color: '#fff', fontWeight: 'bold' }}>{selected.length} Selected</span>
-          <button onClick={() => setBulkPrintList(data.members.filter(m => selected.includes(m.id)))} style={{ background: '#fff', color: primary, border: 'none', padding: '8px 15px', borderRadius: 10, fontWeight: 'bold' }}>Print Selected</button>
+          <button onClick={() => setBulkPrintList(data.members.filter(m => selected.includes(m.id)))} style={{ background: '#fff', color: primary, border: 'none', padding: '8px 15px', borderRadius: 10, fontWeight: 'bold' }}>Print IDs</button>
         </div>
       )}
       {filtered.map(m => (
@@ -382,18 +361,17 @@ const MemberManager = ({ data, colors, primary, mode, onRefresh, showToast, setB
       {form.show && (
         <div style={styles.overlay}>
           <div style={{ ...styles.modal, background: colors.card }}>
-            <h3>Member Details</h3>
+            <h3 style={{color: '#fff'}}>Member Details</h3>
             <form onSubmit={async (e) => {
               e.preventDefault();
               const fd = new FormData(e.target);
               const p = { full_name: fd.get('n'), registration_no: fd.get('r'), expected_amount: Number(fd.get('a')), ajo_owner_id: 'admin' };
               const { error } = form.m ? await supabase.from(CONFIG.modes[mode].membersTable).update(p).eq('id', form.m.id) : await supabase.from(CONFIG.modes[mode].membersTable).insert([p]);
               if (!error) { setForm({ show: false }); onRefresh(); }
-              else showToast("Save failed", "error");
             }}>
-              <input name="n" defaultValue={form.m?.full_name} placeholder="Name" style={{ ...styles.input, borderColor: colors.border, marginBottom: 10 }} required />
-              <input name="r" defaultValue={form.m?.registration_no} placeholder="ID Number" style={{ ...styles.input, borderColor: colors.border, marginBottom: 10 }} required />
-              <input name="a" type="number" defaultValue={form.m?.expected_amount} placeholder="Daily Amount" style={{ ...styles.input, borderColor: colors.border, marginBottom: 20 }} required />
+              <input name="n" defaultValue={form.m?.full_name} placeholder="Name" style={{ ...styles.input, marginBottom: 10, border: `1px solid ${colors.border}` }} required />
+              <input name="r" defaultValue={form.m?.registration_no} placeholder="Reg No" style={{ ...styles.input, marginBottom: 10, border: `1px solid ${colors.border}` }} required />
+              <input name="a" type="number" defaultValue={form.m?.expected_amount} placeholder="Amount" style={{ ...styles.input, marginBottom: 20, border: `1px solid ${colors.border}` }} required />
               <div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: primary, flex: 1 }}>Save</button><button type="button" onClick={() => setForm({ show: false })} style={{ ...styles.btnSecondary, flex: 1 }}>Cancel</button></div>
             </form>
           </div>
@@ -410,7 +388,7 @@ const AgentManager = ({ agents, onRefresh, colors, primary }) => {
       <button onClick={() => setForm({ show: true, a: null })} style={{ ...styles.btnPrimary, background: primary, width: '100%', marginBottom: 15 }}><UserPlus size={18}/> Register Agent</button>
       {agents.map(a => (
         <div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-          <div style={{ flex: 1 }}><strong>{a.full_name}</strong><div style={{ fontSize: 12, opacity: 0.5 }}>Login ID: {a.employee_id_number}</div></div>
+          <div style={{ flex: 1 }}><strong>{a.full_name}</strong><div style={{ fontSize: 12, opacity: 0.5 }}>ID: {a.employee_id_number}</div></div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => setForm({ show: true, a })} style={{ background: 'none', border: 'none', color: primary }}><Edit3 size={18}/></button>
             <button onClick={async () => { if (window.confirm("Delete agent?")) await supabase.from('employees').delete().eq('id', a.id); onRefresh(); }} style={{ background: 'none', border: 'none', color: '#ef4444' }}><Trash2 size={18}/></button>
@@ -420,7 +398,7 @@ const AgentManager = ({ agents, onRefresh, colors, primary }) => {
       {form.show && (
         <div style={styles.overlay}>
           <div style={{ ...styles.modal, background: colors.card }}>
-            <h3>Agent Profile</h3>
+            <h3 style={{color: '#fff'}}>Agent Profile</h3>
             <form onSubmit={async (e) => {
               e.preventDefault();
               const fd = new FormData(e.target);
@@ -428,9 +406,9 @@ const AgentManager = ({ agents, onRefresh, colors, primary }) => {
               const { error } = form.a ? await supabase.from('employees').update(p).eq('id', form.a.id) : await supabase.from('employees').insert([p]);
               if (!error) { setForm({ show: false }); onRefresh(); }
             }}>
-              <input name="n" defaultValue={form.a?.full_name} placeholder="Agent Name" style={{ ...styles.input, borderColor: colors.border, marginBottom: 10 }} required />
-              <input name="e" defaultValue={form.a?.employee_id_number} placeholder="Agent ID" style={{ ...styles.input, borderColor: colors.border, marginBottom: 10 }} required />
-              <input name="p" defaultValue={form.a?.password} placeholder="Password" style={{ ...styles.input, borderColor: colors.border, marginBottom: 20 }} required />
+              <input name="n" defaultValue={form.a?.full_name} placeholder="Agent Name" style={{ ...styles.input, marginBottom: 10, border: `1px solid ${colors.border}` }} required />
+              <input name="e" defaultValue={form.a?.employee_id_number} placeholder="Agent ID" style={{ ...styles.input, marginBottom: 10, border: `1px solid ${colors.border}` }} required />
+              <input name="p" defaultValue={form.a?.password} placeholder="Password" style={{ ...styles.input, marginBottom: 20, border: `1px solid ${colors.border}` }} required />
               <div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: primary, flex: 1 }}>Save</button><button type="button" onClick={() => setForm({ show: false })} style={{ ...styles.btnSecondary, flex: 1 }}>Cancel</button></div>
             </form>
           </div>
@@ -439,20 +417,6 @@ const AgentManager = ({ agents, onRefresh, colors, primary }) => {
     </div>
   );
 };
-
-const LoginScreen = ({ onLogin, loading, colors }) => (
-  <div style={{ background: colors.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-    <div style={{ ...styles.modal, background: colors.card, border: `1px solid ${colors.border}`, textAlign: 'center' }}>
-      <Landmark size={48} color="#3b82f6" style={{ marginBottom: 10 }} />
-      <h2 style={{ color: colors.text, marginBottom: 30 }}>{CONFIG.business.name}</h2>
-      <form onSubmit={e => { e.preventDefault(); onLogin({ u: e.target.u.value, p: e.target.p.value }); }}>
-        <input name="u" placeholder="Admin/Agent ID" style={{ ...styles.input, borderColor: colors.border, marginBottom: 10 }} required />
-        <input name="p" type="password" placeholder="Password" style={{ ...styles.input, borderColor: colors.border, marginBottom: 20 }} required />
-        <button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: '#3b82f6', width: '100%' }}>{loading ? "Logging in..." : "Sign In"}</button>
-      </form>
-    </div>
-  </div>
-);
 
 const ModeSelection = ({ setMode, colors, onLogout }) => (
   <div style={{ background: colors.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
