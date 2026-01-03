@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import {
   Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
   Printer, AlertCircle, Moon, Sun, UserCheck, Search,
   TrendingUp, Calendar, Trash2, Edit3, Download, ArrowLeftRight, 
-  Wallet, HandCoins, CheckSquare, Square
+  Wallet, HandCoins, CheckSquare, Square, CreditCard, ChevronRight
 } from 'lucide-react';
 
 /* ===================== CONFIGURATION ===================== */
@@ -27,6 +27,27 @@ const CONFIG = {
 };
 
 const supabase = createClient(CONFIG.supabase.url, CONFIG.supabase.key);
+
+/* ===================== THEMES & STYLES ===================== */
+const DARK_THEME = { bg: '#020617', card: '#0f172a', text: '#f8fafc', textSecondary: '#94a3b8', border: '#1e293b' };
+const LIGHT_THEME = { bg: '#f1f5f9', card: '#ffffff', text: '#0f172a', textSecondary: '#64748b', border: '#e2e8f0' };
+
+const styles = {
+  app: { minHeight: '100vh', transition: 'all 0.3s ease' },
+  header: { padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(10px)' },
+  main: { padding: 20, paddingBottom: 100, maxWidth: 600, margin: '0 auto' },
+  nav: { display: 'flex', justifyContent: 'space-around', padding: '12px 0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100, borderTop: '1px solid' },
+  card: { padding: 20, borderRadius: 24, border: '1px solid', marginBottom: 15, position: 'relative', overflow: 'hidden' },
+  listItem: { display: 'flex', alignItems: 'center', padding: 16, borderRadius: 18, border: '1px solid', marginBottom: 10, transition: 'transform 0.2s' },
+  btnPrimary: { color: '#fff', border: 'none', borderRadius: 14, padding: '14px 24px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontSize: 15 },
+  btnSecondary: { background: '#64748b', color: '#fff', border: 'none', borderRadius: 14, padding: 12, cursor: 'pointer', fontWeight: '600' },
+  input: { width: '100%', padding: '14px 16px', borderRadius: 12, border: '1px solid', background: 'rgba(255,255,255,0.02)', color: 'inherit', fontSize: 16, outline: 'none' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20, backdropFilter: 'blur(4px)' },
+  modal: { padding: 30, borderRadius: 28, width: '100%', maxWidth: 400, position: 'relative' },
+  bigInput: { fontSize: 42, width: '100%', textAlign: 'center', background: 'none', border: 'none', borderBottom: '3px solid', outline: 'none', fontWeight: '800', margin: '20px 0' },
+  badge: { padding: '4px 10px', borderRadius: 8, fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
+  scanContainer: { position: 'fixed', inset: 0, background: '#000', zIndex: 2000, display: 'flex', flexDirection: 'column' }
+};
 
 /* ===================== UTILS ===================== */
 const useCountUp = (end, duration = 1000) => {
@@ -55,17 +76,12 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const [modal, setModal] = useState({ show: false, title: '', msg: '', onConfirm: null });
   const [bulkPrintList, setBulkPrintList] = useState([]);
-  const [perPage, setPerPage] = useState(8);
 
   const showToast = useCallback((message, type = 'info') => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   }, []);
-
-  const confirmAction = (title, msg, onConfirm) => {
-    setModal({ show: true, title, msg, onConfirm });
-  };
 
   const fetchData = useCallback(async () => {
     if (!auth || !mode) return;
@@ -92,402 +108,489 @@ export default function App() {
     if (u === CONFIG.admin.username && p === CONFIG.admin.password) {
       setAuth({ id: 'admin', role: 'admin', name: 'Admin' });
     } else {
-      const { data: agent } = await supabase.from('employees').select('*').eq('employee_id_number', u).eq('password', p).single();
+      const { data: agent } = await supabase.from('employees').select('*').eq('employee_id_number', u).eq('password', p).maybeSingle();
       if (agent) setAuth({ id: agent.id, role: 'agent', name: agent.full_name, data: agent });
       else showToast("Invalid Credentials", "error");
     }
     setLoading(false);
   };
 
-  const activePrimary = mode ? CONFIG.modes[mode].primary : '#3b82f6';
-  const colors = theme === 'dark' ? { ...DARK_THEME, primary: activePrimary } : { ...LIGHT_THEME, primary: activePrimary };
+  const colors = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
+  const primaryColor = mode ? CONFIG.modes[mode].primary : '#3b82f6';
+
+  useEffect(() => {
+    const s = document.createElement('style');
+    s.textContent = `
+      @keyframes scan-line { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      .scanner-overlay { position: absolute; inset: 0; z-index: 10; box-shadow: 0 0 0 4000px rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.2); border-radius: 24px; }
+      .scanner-laser { position: absolute; width: 100%; height: 3px; background: #ef4444; box-shadow: 0 0 15px #ef4444; animation: scan-line 2s linear infinite; z-index: 11; }
+      @media print {
+        .no-print { display: none !important; }
+        .print-area { display: block !important; width: 210mm; }
+        .print-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10mm; padding: 10mm; }
+        .print-card { border: 1px solid #000; border-radius: 5mm; padding: 10mm; text-align: center; page-break-inside: avoid; }
+      }
+    `;
+    document.head.appendChild(s);
+  }, []);
 
   if (!auth) return <LoginScreen onLogin={handleLogin} loading={loading} theme={theme} />;
-  if (!mode) return <ModeSelection setMode={setMode} colors={colors} setAuth={setAuth} />;
+  if (!mode) return <ModeSelection setMode={setMode} colors={colors} onLogout={() => setAuth(null)} />;
 
   return (
     <div style={{ ...styles.app, background: colors.bg, color: colors.text }}>
       <div className="no-print">
-        <Header business={CONFIG.modes[mode].name} isDark={theme === 'dark'} onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} onSwitchMode={() => setMode(null)} colors={colors} />
+        <header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button onClick={() => setMode(null)} style={{ background: 'none', border: 'none', color: colors.text, cursor: 'pointer' }}><ArrowLeftRight size={20}/></button>
+            <h1 style={{ fontSize: 16, fontWeight: '900', letterSpacing: -0.5 }}>{CONFIG.modes[mode].name}</h1>
+          </div>
+          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+            {theme === 'dark' ? <Sun size={20} color="#fff"/> : <Moon size={20} color="#000"/>}
+          </button>
+        </header>
+
         <main style={styles.main}>
-          {loading ? <SkeletonLoader /> : (
+          {loading ? <div style={{textAlign:'center', padding: 50}}>Syncing Data...</div> : (
             <>
               {auth.role === 'admin' ? 
-                <AdminPortal view={view} data={data} onRefresh={fetchData} showToast={showToast} colors={colors} mode={mode} setBulkPrintList={setBulkPrintList} confirmAction={confirmAction} /> :
-                <AgentPortal view={view} profile={auth.data} data={data} onRefresh={fetchData} showToast={showToast} colors={colors} mode={mode} />
+                <AdminPortal view={view} data={data} onRefresh={fetchData} showToast={showToast} colors={colors} primary={primaryColor} mode={mode} setBulkPrintList={setBulkPrintList} /> :
+                <AgentPortal view={view} profile={auth.data} data={data} onRefresh={fetchData} showToast={showToast} colors={colors} primary={primaryColor} mode={mode} />
               }
             </>
           )}
         </main>
-        <Navigation view={view} role={auth.role} onNavigate={setView} onLogout={() => confirmAction("Logout", "Exit system?", () => setAuth(null))} colors={colors} />
+
+        <nav style={{ ...styles.nav, background: colors.card, borderColor: colors.border }}>
+          <NavBtn active={view === 'dashboard'} icon={<LayoutDashboard/>} label="Home" onClick={() => setView('dashboard')} colors={colors} primary={primaryColor} />
+          <NavBtn active={view === 'members'} icon={<Users/>} label="Members" onClick={() => setView('members')} colors={colors} primary={primaryColor} />
+          {auth.role === 'admin' && <NavBtn active={view === 'agents'} icon={<UserCheck/>} label="Agents" onClick={() => setView('agents')} colors={colors} primary={primaryColor} />}
+          {auth.role === 'agent' && <NavBtn active={view === 'scan'} icon={<Camera/>} label="Scan" onClick={() => setView('scan')} colors={colors} primary={primaryColor} />}
+          <NavBtn icon={<LogOut/>} label="Exit" onClick={() => setAuth(null)} colors={colors} primary={primaryColor} />
+        </nav>
       </div>
 
+      {/* Printing Layer */}
       {bulkPrintList.length > 0 && (
-        <div className="print-area">
-          {Array.from({ length: Math.ceil(bulkPrintList.length / perPage) }).map((_, pageIdx) => (
-            <div key={pageIdx} className={`print-grid grid-${perPage}`}>
-              {bulkPrintList.slice(pageIdx * perPage, (pageIdx + 1) * perPage).map(m => (
-                <div key={m.id} className="print-card">
-                  <h4 style={{ margin: 0 }}>{CONFIG.business.name}</h4>
-                  <div style={{ fontSize: '8pt', fontWeight: 'bold' }}>{mode.toUpperCase()} ID CARD</div>
-                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${m.registration_no}`} style={{ width: '100px', height: '100px' }} alt="qr" />
-                  <div style={{ textAlign: 'left', width: '100%', fontSize: '9pt' }}>
-                    <strong>NAME:</strong> {m.full_name}<br/>
-                    <strong>ID:</strong> {m.registration_no}
-                  </div>
+        <div className="print-area" style={{display: 'none'}}>
+          <div className="print-grid">
+            {bulkPrintList.map(m => (
+              <div key={m.id} className="print-card">
+                <h2 style={{ margin: '0 0 5px 0' }}>{CONFIG.business.name}</h2>
+                <p style={{ margin: '0 0 15px 0', fontSize: 12 }}>{mode.toUpperCase()} IDENTITY CARD</p>
+                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${m.registration_no}`} style={{ width: 140, marginBottom: 15 }} alt="qr" />
+                <div style={{ textAlign: 'left', borderTop: '1px solid #000', paddingTop: 10 }}>
+                  <strong>NAME:</strong> {m.full_name}<br/>
+                  <strong>ID:</strong> {m.registration_no}
                 </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <ToastContainer toasts={toasts} />
-      {modal.show && <ConfirmationModal modal={modal} onClose={() => setModal({ ...modal, show: false })} colors={colors} />}
-      {bulkPrintList.length > 0 && <BulkPrintConfig members={bulkPrintList} perPage={perPage} setPerPage={setPerPage} onClose={() => setBulkPrintList([])} colors={colors} />}
-    </div>
-  );
-}
-
-/* ===================== SEAMLESS AGENT SCANNER ===================== */
-
-const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
-  const [scanning, setScanning] = useState(false);
-  const [member, setMember] = useState(null);
-  const [amt, setAmt] = useState('');
-
-  const handleScan = async (res) => {
-    if (!res) return;
-    try {
-      let lookup;
-      try { lookup = JSON.parse(res).id; } catch (e) { lookup = res; }
-      const table = CONFIG.modes[mode].membersTable;
-      const { data: m } = await supabase.from(table).select('*').or(`id.eq.${lookup},registration_no.eq.${lookup}`).maybeSingle();
-      if (m) { 
-        setMember(m); 
-        setAmt(m.expected_amount || ''); 
-        setScanning(false); 
-        if (navigator.vibrate) navigator.vibrate(50);
-      } else showToast("Member not found", "error");
-    } catch (e) { showToast("Scan Error", "error"); }
-  };
-
-  if (member) return (
-    <div style={{ ...styles.modalBox, background: colors.card, margin: '0 auto', maxWidth: 350 }}>
-      <small style={{color: colors.primary}}>{member.registration_no}</small>
-      <h2 style={{margin: '10px 0'}}>{member.full_name}</h2>
-      <input type="number" value={amt} onChange={e => setAmt(e.target.value)} style={{...styles.bigInput, color: colors.text, borderBottomColor: colors.primary}} autoFocus />
-      <button onClick={async () => {
-        const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([{ 
-          contributor_id: member.id, full_name: member.full_name, registration_no: member.registration_no,
-          amount: Number(amt), employee_id: profile?.id || null, employee_name: profile?.full_name || 'Agent', expected_amount: member.expected_amount
-        }]);
-        if (!error) { showToast("Recorded", "success"); setMember(null); onRefresh(); }
-      }} style={{ ...styles.btnPrimary, background: colors.primary, width: '100%', marginTop: 20 }}>Confirm</button>
-      <button onClick={() => setMember(null)} style={{ ...styles.btnSecondary, width: '100%', marginTop: 10, background: 'none' }}>Cancel</button>
-    </div>
-  );
-
-  return (
-    <div style={{ textAlign: 'center' }}>
-      {!scanning ? (
-        <button onClick={() => setScanning(true)} style={{...styles.scanBtn, borderColor: colors.primary, color: colors.primary}}>
-          <Camera size={32}/> Open Scanner
-        </button>
-      ) : (
-        <div style={styles.scannerWrapper}>
-          <div className="scanner-container" style={styles.scannerContainer}>
-            <Scanner 
-              onScan={(r) => r?.[0] && handleScan(r[0].rawValue)} 
-              onError={() => { showToast("Camera error", "error"); setScanning(false); }}
-            />
+              </div>
+            ))}
           </div>
-          <button onClick={() => setScanning(false)} style={styles.scannerClose}><X size={24}/></button>
-          <p style={{marginTop: 15, opacity: 0.6}}>Position QR within the box</p>
-        </div>
-      )}
-    </div>
-  );
-};
-
-/* ===================== PORTALS (SCANNER FOR AGENT ONLY) ===================== */
-
-const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPrintList, confirmAction }) => {
-  const stats = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    return { todayRev: data.transactions.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0), totalRev: data.transactions.reduce((s, t) => s + (t.amount || 0), 0) };
-  }, [data.transactions]);
-  if (view === 'dashboard') return (
-    <div style={styles.fadeIn}>
-      <DashboardStats stats={stats} memberCount={data.members.length} colors={colors} />
-      <SectionHeader title="Recent Activity" icon={<TrendingUp size={20} />} />
-      <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} />
-    </div>
-  );
-  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={true} confirmAction={confirmAction} mode={mode} setBulkPrintList={setBulkPrintList} />;
-  if (view === 'agents') return <AgentManagement agents={data.agents} onRefresh={onRefresh} showToast={showToast} colors={colors} confirmAction={confirmAction} />;
-  return null;
-};
-
-const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, mode }) => {
-  const stats = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const myTs = data.transactions.filter(t => t.employee_id === profile?.id);
-    return { todayTotal: myTs.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0), count: myTs.filter(t => t.created_at.startsWith(today)).length };
-  }, [data.transactions, profile?.id]);
-  if (view === 'dashboard') return (
-    <div style={styles.fadeIn}>
-      <div style={{...styles.heroCard, background: colors.primary, padding: 30, borderRadius: 24, color: '#fff', marginBottom: 20}}>
-        <small>COLLECTED TODAY</small>
-        <h1 style={{fontSize: 32}}>₦{useCountUp(stats.todayTotal).toLocaleString()}</h1>
-        <span>{stats.count} People processed</span>
-      </div>
-      <SectionHeader title="Your Collections" icon={<Calendar size={20} />} />
-      <TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} />
-    </div>
-  );
-  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={false} mode={mode} setBulkPrintList={()=>{}} />;
-  if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} mode={mode} />;
-  return null;
-};
-
-/* ===================== STYLES & LAYOUT FIXES ===================== */
-
-const DARK_THEME = { bg: '#020617', card: '#0f172a', text: '#f8fafc', textSecondary: '#94a3b8', border: '#1e293b' };
-const LIGHT_THEME = { bg: '#f1f5f9', card: '#ffffff', text: '#0f172a', textSecondary: '#64748b', border: '#e2e8f0' };
-
-const styles = {
-  app: { minHeight: '100vh' },
-  header: { padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 },
-  main: { padding: 20, paddingBottom: 100, maxWidth: 600, margin: '0 auto' },
-  nav: { display: 'flex', justifyContent: 'space-around', padding: '12px 0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 },
-  listItem: { display: 'flex', alignItems: 'center', padding: 15, borderRadius: 16, border: '1px solid', marginBottom: 10 },
-  loginInput: { width: '100%', padding: 14, borderRadius: 12, border: '1px solid #334155', background: 'rgba(255,255,255,0.05)', color: '#ffffff', marginBottom: 12, boxSizing: 'border-box', outline: 'none' },
-  btnPrimary: { color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  btnSecondary: { background: '#64748b', color: '#fff', border: 'none', borderRadius: 12, padding: 12, cursor: 'pointer' },
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 },
-  modalBox: { padding: 30, borderRadius: 24, textAlign: 'center', width: '100%' },
-  scannerContainer: { width: '100%', height: '400px', position: 'relative', borderRadius: 24, overflow: 'hidden', border: '4px solid #3b82f6', background: '#000' },
-  scannerWrapper: { width: '100%', maxWidth: 400, margin: '0 auto' },
-  scannerClose: { marginTop: 20, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '50%', width: 50, height: 50, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '20px auto' },
-  scanBtn: { padding: '45px 20px', borderRadius: 24, width: '100%', border: '2px dashed', background: 'none', fontWeight: 'bold', fontSize: 18, cursor: 'pointer' },
-  bigInput: { fontSize: 40, width: '100%', textAlign: 'center', background: 'none', border: 'none', borderBottom: '3px solid', outline: 'none' },
-  searchBar: { display: 'flex', gap: 10, padding: '12px 16px', border: '1px solid', borderRadius: 14, marginBottom: 15 },
-  subtext: { fontSize: 12, opacity: 0.6 },
-  fadeIn: { animation: 'fadeIn 0.4s ease' },
-  loginPage: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 20 },
-  loginCard: { padding: 35, borderRadius: 28, width: 340, textAlign: 'center', border: '1px solid' },
-  tab: { flex: 1, padding: 10, border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold' },
-  toastContainer: { position: 'fixed', top: 20, left: 20, right: 20, zIndex: 9999, pointerEvents: 'none' },
-  toast: { padding: '12px 20px', borderRadius: 12, color: '#fff', marginBottom: 10, textAlign: 'center', fontWeight: 'bold' },
-  input: { width: '100%', padding: 12, borderRadius: 10, border: '1px solid #ddd', background: 'none', color: 'inherit', marginBottom: 10, boxSizing: 'border-box' },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4 },
-  floatingBar: { position: 'fixed', bottom: 85, left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: 450, padding: '10px 20px', borderRadius: 15, border: '1px solid', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1000, boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }
-};
-
-if (typeof document !== 'undefined') {
-  const s = document.createElement('style');
-  s.textContent = `
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .scanner-container > div { position: absolute !important; top: 0; left: 0; width: 100% !important; height: 100% !important; }
-    video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
-    .print-area { display: none; }
-    @media print {
-      @page { size: A4; margin: 0; }
-      body { background: #fff !important; }
-      .no-print { display: none !important; }
-      .print-area { display: block !important; width: 210mm; }
-      .print-grid { display: grid; gap: 5mm; padding: 10mm; }
-      .print-card { border: 1px solid #000; border-radius: 3mm; padding: 5mm; text-align: center; }
-    }
-  `;
-  document.head.appendChild(s);
-}
-
-/* ===================== COMPONENT LOGIC (REUSED) ===================== */
-
-const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, confirmAction, setBulkPrintList }) => {
-  const [search, setSearch] = useState('');
-  const [selectedIds, setSelectedIds] = useState([]);
-  const filtered = members.filter(m => (m.full_name || '').toLowerCase().includes(search.toLowerCase()) || (m.registration_no || '').includes(search.toUpperCase()));
-  const [form, setForm] = useState({ show: false, member: null });
-
-  return (
-    <div style={styles.fadeIn}>
-      <SearchBar value={search} onChange={setSearch} placeholder="Search members..." colors={colors} />
-      {isAdmin && <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, width: '100%', marginBottom: 15 }}><UserPlus size={18} /> New Member</button>}
-      
-      {selectedIds.length > 0 && (
-        <div style={{...styles.floatingBar, background: colors.card, borderColor: colors.primary}}>
-          <span>{selectedIds.length} Selected</span>
-          <button onClick={() => setBulkPrintList(members.filter(m => selectedIds.includes(m.id)))} style={{...styles.btnPrimary, padding: '8px 16px', fontSize: 12, background: '#10b981'}}><Printer size={14}/> Print</button>
+          <div className="no-print" style={{position:'fixed', bottom: 20, right: 20}}>
+             <button onClick={() => window.print()} style={{...styles.btnPrimary, background: '#10b981'}}>Confirm Print</button>
+             <button onClick={() => setBulkPrintList([])} style={{...styles.btnSecondary, marginTop: 10, width: '100%'}}>Close</button>
+          </div>
         </div>
       )}
 
-      {form.show && <MemberForm member={form.member} mode={mode} onClose={() => setForm({ show: false, member: null })} onSuccess={() => { setForm({ show: false, member: null }); onRefresh(); }} showToast={showToast} colors={colors} />}
-
-      <div style={styles.list}>
-        {filtered.map(m => (
-          <div key={m.id} onClick={() => isAdmin && setSelectedIds(prev => prev.includes(m.id) ? prev.filter(i => i !== m.id) : [...prev, m.id])} style={{ ...styles.listItem, background: colors.card, borderColor: selectedIds.includes(m.id) ? colors.primary : colors.border, cursor: isAdmin ? 'pointer' : 'default', border: '1px solid' }}>
-            <div style={{ flex: 1 }}><strong>{m.full_name}</strong><div style={styles.subtext}>{m.registration_no}</div></div>
-            {isAdmin && <button onClick={(e) => { e.stopPropagation(); setForm({ show: true, member: m }); }} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>}
+      {/* Toast Overlay */}
+      <div style={{ position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
+        {toasts.map(t => (
+          <div key={t.id} style={{ padding: '12px 24px', borderRadius: 12, background: t.type === 'error' ? '#ef4444' : '#10b981', color: '#fff', marginBottom: 10, fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', animation: 'fadeIn 0.3s ease' }}>
+            {t.message}
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+/* ===================== COMPONENTS ===================== */
+
+const NavBtn = ({ active, icon, label, onClick, colors, primary }) => (
+  <button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? primary : colors.textSecondary }}>
+    {React.cloneElement(icon, { size: 22 })}
+    <span style={{ fontSize: 10, fontWeight: active ? 'bold' : 'normal' }}>{label}</span>
+  </button>
+);
+
+const AdminPortal = ({ view, data, onRefresh, showToast, colors, primary, mode, setBulkPrintList }) => {
+  const stats = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      today: data.transactions.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0),
+      total: data.transactions.reduce((s, t) => s + (t.amount || 0), 0)
+    };
+  }, [data.transactions]);
+
+  if (view === 'dashboard') return (
+    <div style={{ animation: 'fadeIn 0.4s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 25 }}>
+        <div style={{ ...styles.card, background: primary, color: '#fff', border: 'none' }}>
+          <small style={{ opacity: 0.8 }}>TODAY</small>
+          <h2 style={{ margin: 0 }}>₦{useCountUp(stats.today).toLocaleString()}</h2>
+        </div>
+        <div style={{ ...styles.card, background: colors.card, borderColor: colors.border }}>
+          <small style={{ color: colors.textSecondary }}>MEMBERS</small>
+          <h2 style={{ margin: 0 }}>{data.members.length}</h2>
+        </div>
+      </div>
+      <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 15}}><TrendingUp size={18}/> <strong>Recent Activity</strong></div>
+      <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} primary={primary} />
+    </div>
+  );
+
+  if (view === 'members') return <MemberManager data={data} onRefresh={onRefresh} showToast={showToast} colors={colors} primary={primary} mode={mode} setBulkPrintList={setBulkPrintList} isAdmin={true} />;
+  if (view === 'agents') return <AgentManager agents={data.agents} onRefresh={onRefresh} showToast={showToast} colors={colors} primary={primary} />;
 };
 
-const Navigation = ({ view, role, onNavigate, onLogout, colors }) => (
-  <nav style={{ ...styles.nav, background: colors.card, borderTop: `1px solid ${colors.border}` }}>
-    <NavBtn active={view === 'dashboard'} icon={<LayoutDashboard/>} label="Home" onClick={() => onNavigate('dashboard')} colors={colors} />
-    <NavBtn active={view === 'members'} icon={<Users/>} label="Members" onClick={() => onNavigate('members')} colors={colors} />
-    {role === 'admin' && <NavBtn active={view === 'agents'} icon={<UserCheck/>} label="Agents" onClick={() => onNavigate('agents')} colors={colors} />}
-    {role === 'agent' && <NavBtn active={view === 'scan'} icon={<Camera/>} label="Scan" onClick={() => onNavigate('scan')} colors={colors} />}
-    <NavBtn icon={<LogOut/>} label="Exit" onClick={onLogout} colors={colors} />
-  </nav>
+const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, primary, mode }) => {
+  const stats = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const myTs = data.transactions.filter(t => t.employee_id === profile?.id);
+    return {
+      today: myTs.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0),
+      count: myTs.filter(t => t.created_at.startsWith(today)).length
+    };
+  }, [data.transactions, profile]);
+
+  if (view === 'dashboard') return (
+    <div style={{ animation: 'fadeIn 0.4s ease' }}>
+      <div style={{ ...styles.card, background: primary, color: '#fff', padding: 30, border: 'none', textAlign: 'center' }}>
+        <div style={{ opacity: 0.8, fontSize: 12, marginBottom: 8 }}>COLLECTED TODAY</div>
+        <h1 style={{ fontSize: 42, margin: 0 }}>₦{useCountUp(stats.today).toLocaleString()}</h1>
+        <div style={{ marginTop: 10, fontSize: 14 }}>{stats.count} People Cleared</div>
+      </div>
+      <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 15}}><Calendar size={18}/> <strong>Your Recent Work</strong></div>
+      <TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} primary={primary} />
+    </div>
+  );
+
+  if (view === 'members') return <MemberManager data={data} onRefresh={onRefresh} showToast={showToast} colors={colors} primary={primary} mode={mode} isAdmin={false} />;
+  if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} primary={primary} mode={mode} />;
+};
+
+/* ===================== THE IMPROVED SCANNER ===================== */
+
+const ScannerView = ({ profile, onRefresh, showToast, colors, primary, mode }) => {
+  const [active, setActive] = useState(false);
+  const [manualId, setManualId] = useState('');
+  const [member, setMember] = useState(null);
+  const [amount, setAmount] = useState('');
+  const [processing, setProcessing] = useState(false);
+
+  const lookupMember = async (id) => {
+    const table = CONFIG.modes[mode].membersTable;
+    const { data: m } = await supabase.from(table).select('*').or(`registration_no.eq.${id},id.eq.${id}`).maybeSingle();
+    if (m) {
+      if (navigator.vibrate) navigator.vibrate(100);
+      setMember(m);
+      setAmount(m.expected_amount || '');
+      setActive(false);
+    } else {
+      showToast("Member not found", "error");
+    }
+  };
+
+  const handleTransaction = async () => {
+    if (!amount || amount <= 0) return;
+    setProcessing(true);
+    const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([{ 
+      contributor_id: member.id, 
+      full_name: member.full_name, 
+      registration_no: member.registration_no,
+      amount: Number(amount), 
+      employee_id: profile?.id, 
+      employee_name: profile?.full_name,
+      expected_amount: member.expected_amount
+    }]);
+
+    if (!error) {
+      showToast("Payment Recorded", "success");
+      setMember(null);
+      onRefresh();
+    } else {
+      showToast("Transaction failed", "error");
+    }
+    setProcessing(false);
+  };
+
+  if (member) return (
+    <div style={{ animation: 'fadeIn 0.3s ease' }}>
+      <div style={{ ...styles.card, background: colors.card, borderColor: colors.border, textAlign: 'center' }}>
+        <span style={{ ...styles.badge, background: primary, color: '#fff' }}>{member.registration_no}</span>
+        <h2 style={{ margin: '15px 0 5px' }}>{member.full_name}</h2>
+        <p style={{ opacity: 0.6, fontSize: 14 }}>Enter collection amount</p>
+        
+        <input 
+          type="number" 
+          value={amount} 
+          onChange={e => setAmount(e.target.value)} 
+          style={{ ...styles.bigInput, color: colors.text, borderBottomColor: primary }}
+          autoFocus
+        />
+
+        <button onClick={handleTransaction} disabled={processing} style={{ ...styles.btnPrimary, background: primary, width: '100%' }}>
+          {processing ? "Saving..." : "Confirm Payment"}
+        </button>
+        <button onClick={() => setMember(null)} style={{ ...styles.btnSecondary, width: '100%', marginTop: 10, background: 'none', color: colors.textSecondary }}>Cancel</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ textAlign: 'center' }}>
+      {!active ? (
+        <div style={{ display: 'grid', gap: 15 }}>
+          <button onClick={() => setActive(true)} style={{ ...styles.card, background: 'none', border: `2px dashed ${primary}`, color: primary, cursor: 'pointer', height: 180, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <Camera size={40}/>
+            <span style={{ fontWeight: 'bold' }}>Open Camera Scanner</span>
+          </button>
+          
+          <div style={{ position: 'relative', margin: '10px 0' }}>
+            <hr style={{ borderColor: colors.border, opacity: 0.3 }} />
+            <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate( -50%, -50% )', padding: '0 15px', background: colors.bg, fontSize: 12, color: colors.textSecondary }}>OR MANUAL ENTRY</span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <input placeholder="Member ID (e.g. 001)" value={manualId} onChange={e => setManualId(e.target.value)} style={{ ...styles.input, borderColor: colors.border }} />
+            <button onClick={() => lookupMember(manualId)} style={{ ...styles.btnPrimary, background: primary }}><ChevronRight/></button>
+          </div>
+        </div>
+      ) : (
+        <div style={styles.scanContainer}>
+          <div style={{ padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ color: '#fff', margin: 0 }}>Scanning Code</h3>
+            <button onClick={() => setActive(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', padding: 10, borderRadius: '50%' }}><X/></button>
+          </div>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <Scanner 
+              onScan={(res) => res?.[0] && lookupMember(res[0].rawValue)} 
+              styles={{ container: { width: '100%', height: '100%' } }}
+              components={{ finder: false, audio: false }}
+            />
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+              <div style={{ width: 250, height: 250, position: 'relative' }}>
+                <div className="scanner-overlay"></div>
+                <div className="scanner-laser"></div>
+              </div>
+            </div>
+          </div>
+          <div style={{ padding: 40, color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Position the QR code inside the box</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ===================== OTHER UI PARTS ===================== */
+
+const MemberManager = ({ data, onRefresh, showToast, colors, primary, mode, setBulkPrintList, isAdmin }) => {
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState([]);
+  const [form, setForm] = useState({ show: false, m: null });
+
+  const filtered = data.members.filter(m => 
+    m.full_name.toLowerCase().includes(query.toLowerCase()) || 
+    m.registration_no.includes(query.toUpperCase())
+  );
+
+  const toggleSelect = (id) => {
+    if (!isAdmin) return;
+    setSelected(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 15, background: colors.card, padding: '4px 12px', borderRadius: 14, border: `1px solid ${colors.border}`, alignItems: 'center' }}>
+        <Search size={18} opacity={0.5}/>
+        <input placeholder="Search members..." value={query} onChange={e => setQuery(e.target.value)} style={{ background: 'none', border: 'none', color: colors.text, padding: '12px 0', outline: 'none', flex: 1 }} />
+      </div>
+
+      {isAdmin && (
+        <button onClick={() => setForm({ show: true, m: null })} style={{ ...styles.btnPrimary, background: primary, width: '100%', marginBottom: 15 }}>
+          <UserPlus size={18}/> Add New Member
+        </button>
+      )}
+
+      {selected.length > 0 && (
+        <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: 400, background: primary, padding: '12px 20px', borderRadius: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1000, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+          <span style={{ color: '#fff', fontWeight: 'bold' }}>{selected.length} selected</span>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => setBulkPrintList(data.members.filter(m => selected.includes(m.id)))} style={{ background: '#fff', color: primary, border: 'none', padding: '8px 15px', borderRadius: 10, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 6 }}><Printer size={16}/> Print</button>
+            <button onClick={() => setSelected([])} style={{ color: '#fff', background: 'none', border: 'none' }}><X size={20}/></button>
+          </div>
+        </div>
+      )}
+
+      {filtered.map(m => (
+        <div key={m.id} onClick={() => toggleSelect(m.id)} style={{ ...styles.listItem, background: colors.card, borderColor: selected.includes(m.id) ? primary : colors.border }}>
+          {isAdmin && <div style={{ marginRight: 15 }}>{selected.includes(m.id) ? <CheckSquare size={20} color={primary}/> : <Square size={20} opacity={0.3}/>}</div>}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 'bold' }}>{m.full_name}</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>{m.registration_no} • ₦{m.expected_amount || 0}</div>
+          </div>
+          {isAdmin && <button onClick={(e) => { e.stopPropagation(); setForm({ show: true, m }); }} style={{ background: 'none', border: 'none', color: primary, padding: 8 }}><Edit3 size={18}/></button>}
+        </div>
+      ))}
+
+      {form.show && (
+        <div style={styles.overlay}>
+          <div style={{ ...styles.modal, background: colors.card }}>
+            <h3>{form.m ? 'Edit Member' : 'New Member'}</h3>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const fd = new FormData(e.target);
+              const payload = { 
+                full_name: fd.get('name'), 
+                registration_no: fd.get('reg'), 
+                expected_amount: Number(fd.get('amt')), 
+                ajo_owner_id: 'admin' 
+              };
+              const { error } = form.m 
+                ? await supabase.from(CONFIG.modes[mode].membersTable).update(payload).eq('id', form.m.id)
+                : await supabase.from(CONFIG.modes[mode].membersTable).insert([payload]);
+              
+              if (!error) { showToast("Saved", "success"); setForm({ show: false, m: null }); onRefresh(); }
+              else showToast("Error", "error");
+            }}>
+              <input name="name" defaultValue={form.m?.full_name} placeholder="Full Name" style={{ ...styles.input, borderColor: colors.border, marginBottom: 10 }} required />
+              <input name="reg" defaultValue={form.m?.registration_no} placeholder="Reg Number" style={{ ...styles.input, borderColor: colors.border, marginBottom: 10 }} required />
+              <input name="amt" type="number" defaultValue={form.m?.expected_amount} placeholder="Daily Amount" style={{ ...styles.input, borderColor: colors.border, marginBottom: 20 }} required />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="submit" style={{ ...styles.btnPrimary, background: primary, flex: 1 }}>Save</button>
+                <button type="button" onClick={() => setForm({ show: false, m: null })} style={{ ...styles.btnSecondary, flex: 1 }}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TransactionList = ({ transactions, colors, primary }) => (
+  <div>
+    {transactions.length === 0 && <div style={{ opacity: 0.5, textAlign: 'center', padding: 20 }}>No records found</div>}
+    {transactions.map(t => (
+      <div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: primary + '15', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12, color: primary }}>
+          <CreditCard size={20}/>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 'bold', fontSize: 14 }}>{t.full_name}</div>
+          <div style={{ fontSize: 11, opacity: 0.5 }}>By {t.employee_name || 'Admin'} • {new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontWeight: 'bold', color: primary }}>₦{t.amount?.toLocaleString()}</div>
+        </div>
+      </div>
+    ))}
+  </div>
 );
+
+const AgentManager = ({ agents, onRefresh, showToast, colors, primary }) => {
+  const [form, setForm] = useState({ show: false, a: null });
+
+  return (
+    <div>
+      <button onClick={() => setForm({ show: true, a: null })} style={{ ...styles.btnPrimary, background: primary, width: '100%', marginBottom: 15 }}>
+        <UserPlus size={18}/> Register New Agent
+      </button>
+
+      {agents.map(a => (
+        <div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 'bold' }}>{a.full_name}</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>ID: {a.employee_id_number}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 5 }}>
+            <button onClick={() => setForm({ show: true, a })} style={{ background: 'none', border: 'none', color: primary, padding: 8 }}><Edit3 size={18}/></button>
+            <button onClick={async () => {
+              if (window.confirm("Delete agent?")) {
+                await supabase.from('employees').delete().eq('id', a.id);
+                onRefresh();
+              }
+            }} style={{ background: 'none', border: 'none', color: '#ef4444', padding: 8 }}><Trash2 size={18}/></button>
+          </div>
+        </div>
+      ))}
+
+      {form.show && (
+        <div style={styles.overlay}>
+          <div style={{ ...styles.modal, background: colors.card }}>
+            <h3>Agent Profile</h3>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const fd = new FormData(e.target);
+              const payload = { 
+                full_name: fd.get('name'), 
+                employee_id_number: fd.get('eid').toLowerCase(), 
+                password: fd.get('pwd') 
+              };
+              const { error } = form.a 
+                ? await supabase.from('employees').update(payload).eq('id', form.a.id)
+                : await supabase.from('employees').insert([payload]);
+              
+              if (!error) { showToast("Success", "success"); setForm({ show: false, a: null }); onRefresh(); }
+              else showToast("Error", "error");
+            }}>
+              <input name="name" defaultValue={form.a?.full_name} placeholder="Full Name" style={{ ...styles.input, borderColor: colors.border, marginBottom: 10 }} required />
+              <input name="eid" defaultValue={form.a?.employee_id_number} placeholder="Agent Login ID" style={{ ...styles.input, borderColor: colors.border, marginBottom: 10 }} required />
+              <input name="pwd" defaultValue={form.a?.password} placeholder="Login Password" style={{ ...styles.input, borderColor: colors.border, marginBottom: 20 }} required />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="submit" style={{ ...styles.btnPrimary, background: primary, flex: 1 }}>Save</button>
+                <button type="button" onClick={() => setForm({ show: false, a: null })} style={{ ...styles.btnSecondary, flex: 1 }}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const LoginScreen = ({ onLogin, loading, theme }) => {
   const [type, setType] = useState('admin');
   const colors = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
+
   return (
-    <div style={{ ...styles.loginPage, background: colors.bg }}>
-      <div style={{ ...styles.loginCard, background: colors.card, borderColor: colors.border }}>
+    <div style={{ background: colors.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ ...styles.modal, background: colors.card, border: `1px solid ${colors.border}`, textAlign: 'center' }}>
         <Landmark size={48} color="#3b82f6" style={{ marginBottom: 10 }} />
-        <h2 style={{ color: colors.text, marginBottom: 20 }}>{CONFIG.business.name}</h2>
-        <div style={{ display: 'flex', gap: 5, background: theme === 'dark' ? '#020617' : '#f1f5f9', padding: 4, borderRadius: 10, marginBottom: 20 }}>
-          <button onClick={() => setType('admin')} style={{ ...styles.tab, background: type === 'admin' ? '#3b82f6' : 'none', color: type === 'admin' ? '#fff' : colors.textSecondary }}>Admin</button>
-          <button onClick={() => setType('agent')} style={{ ...styles.tab, background: type === 'agent' ? '#3b82f6' : 'none', color: type === 'agent' ? '#fff' : colors.textSecondary }}>Agent</button>
+        <h2 style={{ color: colors.text, marginBottom: 25, letterSpacing: -1 }}>{CONFIG.business.name}</h2>
+        
+        <div style={{ display: 'flex', background: theme === 'dark' ? '#020617' : '#f1f5f9', padding: 4, borderRadius: 14, marginBottom: 20 }}>
+          <button onClick={() => setType('admin')} style={{ flex: 1, padding: 10, border: 'none', borderRadius: 10, fontWeight: 'bold', background: type === 'admin' ? '#3b82f6' : 'none', color: type === 'admin' ? '#fff' : colors.textSecondary }}>Admin</button>
+          <button onClick={() => setType('agent')} style={{ flex: 1, padding: 10, border: 'none', borderRadius: 10, fontWeight: 'bold', background: type === 'agent' ? '#3b82f6' : 'none', color: type === 'agent' ? '#fff' : colors.textSecondary }}>Agent</button>
         </div>
+
         <form onSubmit={e => { e.preventDefault(); onLogin({ username: e.target.u.value, password: e.target.p.value }); }}>
-          <input name="u" placeholder={type === 'admin' ? "Admin ID" : "Agent ID"} style={styles.loginInput} required />
-          <input name="p" type="password" placeholder="Password" style={styles.loginInput} required />
-          <button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: '#3b82f6', width: '100%', marginTop: 10 }}>Login</button>
+          <input name="u" placeholder={type === 'admin' ? "Username" : "Agent ID"} style={{ ...styles.input, borderColor: colors.border, marginBottom: 10 }} required />
+          <input name="p" type="password" placeholder="Password" style={{ ...styles.input, borderColor: colors.border, marginBottom: 20 }} required />
+          <button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: '#3b82f6', width: '100%' }}>
+            {loading ? "Authenticating..." : "Sign In"}
+          </button>
         </form>
       </div>
     </div>
   );
 };
 
-const Header = ({ business, isDark, onToggleTheme, onSwitchMode, colors }) => (
-  <header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <button onClick={onSwitchMode} style={{ background: 'none', border: 'none', color: colors.text, cursor:'pointer' }}><ArrowLeftRight size={20}/></button>
-      <h1 style={{fontSize: 15, fontWeight: '900'}}>{business}</h1>
-    </div>
-    <button onClick={onToggleTheme} style={{background: 'none', border: 'none', cursor:'pointer'}}>{isDark ? <Sun color="#fff"/> : <Moon color="#000"/>}</button>
-  </header>
-);
-
-const NavBtn = ({ active, icon, label, onClick, colors }) => (
-  <button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? colors.primary : colors.textSecondary }}>{icon}<span style={{ fontSize: 10 }}>{label}</span></button>
-);
-
-const SearchBar = ({ value, onChange, placeholder, colors }) => (
-  <div style={{ ...styles.searchBar, background: colors.card, borderColor: colors.border }}>
-    <Search size={18} opacity={0.5} />
-    <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ background: 'none', border: 'none', color: colors.text, width: '100%', outline: 'none' }} />
-  </div>
-);
-
-const TransactionList = ({ transactions, colors }) => (
-  <div style={styles.list}>
-    {transactions.map(t => (
-      <div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-        <div style={{ flex: 1 }}><strong>{t.full_name}</strong><br/><small style={styles.subtext}>{t.employee_name || 'Admin'}</small></div>
-        <strong style={{ color: colors.primary }}>₦{t.amount?.toLocaleString()}</strong>
-      </div>
-    ))}
-  </div>
-);
-
-const DashboardStats = ({ stats, memberCount, colors }) => (
-  <div style={{display: 'flex', gap: 10, marginBottom: 20}}>
-    <div style={{flex: 1, padding: 15, background: colors.card, borderRadius: 16, border: '1px solid', borderColor: colors.border}}><small style={{opacity: 0.6, fontSize: 10}}>TODAY</small><div style={{fontWeight: 'bold'}}>₦{useCountUp(stats.todayRev).toLocaleString()}</div></div>
-    <div style={{flex: 1, padding: 15, background: colors.card, borderRadius: 16, border: '1px solid', borderColor: colors.border}}><small style={{opacity: 0.6, fontSize: 10}}>MEMBERS</small><div style={{fontWeight: 'bold'}}>{memberCount}</div></div>
-  </div>
-);
-
-const ModeSelection = ({ setMode, colors, setAuth }) => (
-  <div style={{ background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 20 }}>
-    <div style={{ textAlign: 'center', width: '100%', maxWidth: 380 }}>
+const ModeSelection = ({ setMode, colors, onLogout }) => (
+  <div style={{ background: colors.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
       <h2 style={{ color: colors.text, marginBottom: 30 }}>Select Portal</h2>
       <div style={{ display: 'grid', gap: 15 }}>
-        <button onClick={() => setMode('ajo')} style={{ ...styles.btnPrimary, border: `2px solid ${CONFIG.modes.ajo.primary}`, color: CONFIG.modes.ajo.primary, background: 'none', height: 100, fontSize: 18 }}><Wallet size={28} /> AJO PORTAL</button>
-        <button onClick={() => setMode('loans')} style={{ ...styles.btnPrimary, border: `2px solid ${CONFIG.modes.loans.primary}`, color: CONFIG.modes.loans.primary, background: 'none', height: 100, fontSize: 18 }}><HandCoins size={28} /> LOAN PORTAL</button>
+        <button onClick={() => setMode('ajo')} style={{ ...styles.card, background: 'none', borderColor: CONFIG.modes.ajo.primary, color: CONFIG.modes.ajo.primary, cursor: 'pointer', height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 15, fontSize: 20, fontWeight: '900' }}>
+          <Wallet size={32}/> AJO SYSTEM
+        </button>
+        <button onClick={() => setMode('loans')} style={{ ...styles.card, background: 'none', borderColor: CONFIG.modes.loans.primary, color: CONFIG.modes.loans.primary, cursor: 'pointer', height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 15, fontSize: 20, fontWeight: '900' }}>
+          <HandCoins size={32}/> LOAN SYSTEM
+        </button>
       </div>
-      <button onClick={() => setAuth(null)} style={{ marginTop: 30, color: colors.textSecondary, background: 'none', border: 'none', cursor:'pointer' }}>Logout</button>
+      <button onClick={onLogout} style={{ marginTop: 40, background: 'none', border: 'none', color: colors.textSecondary, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, margin: '40px auto 0' }}><LogOut size={18}/> Log out of System</button>
     </div>
   </div>
-);
-
-const AgentManagement = ({ agents, onRefresh, showToast, colors, confirmAction }) => {
-  const [form, setForm] = useState({ show: false, agent: null });
-  return (
-    <div>
-      <button onClick={() => setForm({ show: true, agent: null })} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15, width: '100%' }}><UserPlus size={16} /> New Agent</button>
-      {form.show && <AgentForm agent={form.agent} onClose={() => setForm({ show: false, agent: null })} onSuccess={() => { setForm({ show: false, agent: null }); onRefresh(); }} showToast={showToast} colors={colors} />}
-      <div style={styles.list}>
-        {agents.map(a => (
-          <div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-            <div style={{ flex: 1 }}><strong>{a.full_name}</strong><br/><small style={styles.subtext}>ID: {a.employee_id_number}</small></div>
-            <div style={{display:'flex', gap:5}}>
-              <button onClick={() => setForm({ show: true, agent: a })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
-              <button onClick={() => confirmAction("Delete?", `Remove?`, async () => { await supabase.from('employees').delete().eq('id', a.id); onRefresh(); })} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const AgentForm = ({ agent, onClose, onSuccess, showToast, colors }) => {
-  const isEdit = !!agent;
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const payload = { full_name: fd.get('n'), employee_id_number: fd.get('id').toLowerCase(), password: fd.get('p') };
-    const { error } = isEdit ? await supabase.from('employees').update(payload).eq('id', agent.id) : await supabase.from('employees').insert([payload]);
-    if (error) showToast("Error saving", "error");
-    else { showToast("Saved", "success"); onSuccess(); }
-  };
-  return (
-    <div style={styles.overlay}><div style={{ ...styles.modalBox, background: colors.card, maxWidth: 350 }}><h3>Agent</h3><form onSubmit={handleSubmit} style={{ textAlign: 'left', display: 'grid', gap: 10 }}><input name="n" defaultValue={agent?.full_name} placeholder="Name" style={styles.input} required /><input name="id" defaultValue={agent?.employee_id_number} placeholder="ID" style={styles.input} required /><input name="p" defaultValue={agent?.password} placeholder="Password" style={styles.input} required /><div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>Save</button><button type="button" onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button></div></form></div></div>
-  );
-};
-
-const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => {
-  const isEdit = !!member;
-  const table = CONFIG.modes[mode].membersTable;
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const payload = { full_name: fd.get('n'), registration_no: fd.get('r'), expected_amount: Number(fd.get('am')), ajo_owner_id: 'admin' };
-    const { error } = isEdit ? await supabase.from(table).update(payload).eq('id', member.id) : await supabase.from(table).insert([payload]);
-    if (error) showToast("Error saving", "error");
-    else { showToast("Saved", "success"); onSuccess(); }
-  };
-  return (
-    <div style={styles.overlay}><div style={{ ...styles.modalBox, background: colors.card, maxWidth: 400 }}><h3>Member</h3><form onSubmit={handleSubmit} style={{ textAlign: 'left', display: 'grid', gap: 10 }}><input name="n" defaultValue={member?.full_name} placeholder="Name" style={styles.input} required /><input name="r" defaultValue={member?.registration_no} placeholder="Reg No" style={styles.input} required /><input name="am" type="number" defaultValue={member?.expected_amount} placeholder="Amount" style={styles.input} required /><div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>Save</button><button type="button" onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button></div></form></div></div>
-  );
-};
-
-const SectionHeader = ({ title, icon }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '20px 0 10px' }}>{icon} <strong style={{fontSize: 15}}>{title}</strong></div>
-);
-
-const ConfirmationModal = ({ modal, onClose, colors }) => (
-  <div style={styles.overlay}><div style={{ ...styles.modalBox, background: colors.card, borderColor: colors.border, maxWidth: 350 }}><h3>{modal.title}</h3><p>{modal.msg}</p><div style={{ display: 'flex', gap: 10 }}><button style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }} onClick={() => { modal.onConfirm(); onClose(); }}>Yes</button><button style={{...styles.btnSecondary, flex: 1}} onClick={onClose}>No</button></div></div></div>
-);
-
-const ToastContainer = ({ toasts }) => (
-  <div style={styles.toastContainer}>{toasts.map(t => (<div key={t.id} style={{ ...styles.toast, background: t.type === 'error' ? '#ef4444' : '#10b981' }}>{t.message}</div>))}</div>
-);
-
-const SkeletonLoader = () => (<div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}><div style={{ height: 60, borderRadius: 12, background: '#334155' }}></div><div style={{ height: 150, borderRadius: 12, background: '#334155' }}></div></div>);
-
-const BulkPrintConfig = ({ members, perPage, setPerPage, onClose, colors }) => (
-  <div style={styles.overlay} className="no-print"><div style={{ ...styles.modalBox, background: colors.card, maxWidth: 400 }}><h3>Print</h3><div style={{ display: 'flex', gap: 10 }}><button onClick={() => { setTimeout(() => window.print(), 500); }} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>Start</button><button onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button></div></div></div>
 );
