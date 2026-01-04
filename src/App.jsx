@@ -5,10 +5,11 @@ import {
   Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
   Printer, Moon, Sun, UserCheck, Search, TrendingUp, Calendar, 
   Trash2, Edit3, ArrowLeftRight, Wallet, HandCoins, CheckSquare, 
-  Square, CreditCard, ChevronRight, QrCode, Zap, ZapOff, AlertCircle
+  Square, CreditCard, ChevronRight, QrCode, Zap, ZapOff, AlertCircle,
+  Phone, MapPin, Plus, ArrowUpRight, TrendingDown, MoreVertical
 } from 'lucide-react';
 
-/* ===================== CONFIGURATION ===================== */
+/* ===================== ENHANCED CONFIGURATION ===================== */
 const CONFIG = {
   supabase: {
     url: 'https://watrosnylvkiuvuptdtp.supabase.co',
@@ -21,32 +22,74 @@ const CONFIG = {
   },
   admin: { username: 'oreofe', password: 'oreofe' },
   modes: {
-    ajo: { name: 'AJO SYSTEM', primary: '#3b82f6', membersTable: 'contributors', transTable: 'transactions' },
-    loans: { name: 'LOAN SYSTEM', primary: '#ef4444', membersTable: 'loan_members', transTable: 'loan_transactions' }
+    ajo: { 
+      name: 'AJO SYSTEM', 
+      primary: '#3b82f6', 
+      gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+      membersTable: 'contributors', 
+      transTable: 'transactions' 
+    },
+    loans: { 
+      name: 'LOAN SYSTEM', 
+      primary: '#ef4444', 
+      gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+      membersTable: 'loan_members', 
+      transTable: 'loan_transactions' 
+    }
   }
 };
 
 const supabase = createClient(CONFIG.supabase.url, CONFIG.supabase.key);
 
-/* ===================== STYLES & THEMES ===================== */
-const DARK_THEME = { bg: '#020617', card: '#0f172a', text: '#f8fafc', textSecondary: '#94a3b8', border: '#1e293b' };
-const LIGHT_THEME = { bg: '#f1f5f9', card: '#ffffff', text: '#0f172a', textSecondary: '#64748b', border: '#e2e8f0' };
+/* ===================== ADVANCED STYLES (GLASSMORPHISM) ===================== */
+const getTheme = (mode) => ({
+  dark: {
+    bg: '#020617',
+    card: 'rgba(30, 41, 59, 0.7)',
+    cardSolid: '#1e293b',
+    text: '#f8fafc',
+    textSecondary: '#94a3b8',
+    border: 'rgba(255, 255, 255, 0.1)',
+    glass: 'rgba(15, 23, 42, 0.8)',
+    input: 'rgba(0, 0, 0, 0.2)'
+  },
+  light: {
+    bg: '#f8fafc',
+    card: 'rgba(255, 255, 255, 0.8)',
+    cardSolid: '#ffffff',
+    text: '#0f172a',
+    textSecondary: '#64748b',
+    border: 'rgba(0, 0, 0, 0.05)',
+    glass: 'rgba(255, 255, 255, 0.9)',
+    input: 'rgba(255, 255, 255, 1)'
+  }
+});
 
-const styles = {
-  app: { minHeight: '100vh', transition: 'all 0.3s ease' },
-  header: { padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(10px)' },
-  main: { padding: 20, paddingBottom: 100, maxWidth: 600, margin: '0 auto' },
-  nav: { display: 'flex', justifyContent: 'space-around', padding: '12px 0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100, borderTop: '1px solid' },
-  card: { padding: 20, borderRadius: 24, border: '1px solid', marginBottom: 15, position: 'relative' },
-  listItem: { display: 'flex', alignItems: 'center', padding: 16, borderRadius: 18, border: '1px solid', marginBottom: 10 },
-  btnPrimary: { color: '#fff', border: 'none', borderRadius: 14, padding: '14px 24px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontSize: 15 },
-  btnSecondary: { background: '#64748b', color: '#fff', border: 'none', borderRadius: 14, padding: 12, cursor: 'pointer', fontWeight: '600' },
-  input: { width: '100%', padding: '14px 16px', borderRadius: 12, border: '1px solid', background: 'rgba(255,255,255,0.05)', color: '#ffffff', fontSize: 16, outline: 'none', boxSizing: 'border-box' },
-  bigInput: { fontSize: 42, width: '100%', textAlign: 'center', background: 'none', border: 'none', borderBottom: '3px solid', outline: 'none', fontWeight: '800', margin: '20px 0', color: '#ffffff' },
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20, backdropFilter: 'blur(4px)' },
-  modal: { padding: 30, borderRadius: 28, width: '100%', maxWidth: 400 },
-  scanContainer: { position: 'fixed', inset: 0, background: '#000', zIndex: 2000, display: 'flex', flexDirection: 'column' }
+const sharedStyles = {
+  glass: { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' },
+  shadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+  btn: {
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+    cursor: 'pointer',
+    border: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    fontWeight: '600'
+  }
 };
+
+/* ===================== UTILITIES ===================== */
+const hapticFeedback = (type = 'light') => {
+  if (!navigator.vibrate) return;
+  if (type === 'light') navigator.vibrate(10);
+  if (type === 'medium') navigator.vibrate(30);
+  if (type === 'error') navigator.vibrate([50, 30, 50]);
+  if (type === 'success') navigator.vibrate([10, 30, 10]);
+};
+
+const formatCurrency = (amt) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amt || 0);
 
 /* ===================== MAIN APP ===================== */
 export default function App() {
@@ -59,8 +102,13 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const [bulkPrintList, setBulkPrintList] = useState([]);
 
+  const colors = useMemo(() => getTheme()[theme], [theme]);
+  const primary = mode ? CONFIG.modes[mode].primary : '#3b82f6';
+  const gradient = mode ? CONFIG.modes[mode].gradient : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+
   const showToast = useCallback((message, type = 'info') => {
     const id = Date.now();
+    hapticFeedback(type === 'error' ? 'error' : 'success');
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   }, []);
@@ -71,260 +119,175 @@ export default function App() {
     const mConf = CONFIG.modes[mode];
     try {
       const [m, t, e] = await Promise.all([
-        supabase.from(mConf.membersTable).select('*').order('registration_no'),
-        supabase.from(mConf.transTable).select('*').order('created_at', { ascending: false }),
+        supabase.from(mConf.membersTable).select('*').order('created_at', { ascending: false }),
+        supabase.from(mConf.transTable).select('*').order('created_at', { ascending: false }).limit(50),
         supabase.from('employees').select('*').order('full_name')
       ]);
       setData({ members: m.data || [], transactions: t.data || [], agents: e.data || [] });
-      localStorage.setItem(`cache_members_${mode}`, JSON.stringify(m.data || []));
     } catch (err) { showToast("Sync failed", "error"); }
     finally { setLoading(false); }
   }, [auth, mode, showToast]);
 
   useEffect(() => { if (auth && mode) fetchData(); }, [auth, mode, fetchData]);
 
-  const handleLogin = async (creds) => {
-    setLoading(true);
-    if (creds.type === 'admin') {
-      if (creds.u.toLowerCase() === CONFIG.admin.username && creds.p === CONFIG.admin.password) {
-        setAuth({ id: 'admin', role: 'admin', name: 'Admin' });
-      } else { showToast("Invalid Admin Login", "error"); }
-      setLoading(false);
-    } else {
-      const { data: agent } = await supabase.from('employees').select('*').eq('employee_id_number', creds.u.toLowerCase()).eq('password', creds.p).maybeSingle();
-      if (agent) setAuth({ id: agent.id, role: 'agent', name: agent.full_name, data: agent });
-      else showToast("Invalid Agent Login", "error");
-      setLoading(false);
-    }
-  };
-
-  const colors = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
-  const primaryColor = mode ? CONFIG.modes[mode].primary : '#3b82f6';
-
+  // Global Styles injection
   useEffect(() => {
     const s = document.createElement('style');
     s.textContent = `
-      @keyframes scan-line { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
-      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-      .scanner-overlay { position: absolute; inset: 0; z-index: 10; box-shadow: 0 0 0 4000px rgba(0,0,0,0.7); border: 2px solid rgba(255,255,255,0.3); border-radius: 24px; }
-      .scanner-laser { position: absolute; width: 100%; height: 3px; background: #ef4444; box-shadow: 0 0 15px #ef4444; animation: scan-line 2s linear infinite; z-index: 11; }
-      input::placeholder { color: rgba(255,255,255,0.4); }
-      @media print {
-        .no-print { display: none !important; }
-        .print-area { display: block !important; width: 210mm; }
-        .print-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10mm; padding: 10mm; }
-        .print-card { border: 1px solid #000; border-radius: 5mm; padding: 10mm; text-align: center; color: #000 !important; }
-      }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: 'Inter', system-ui, sans-serif; }
+      body { margin: 0; padding: 0; overflow-x: hidden; }
+      .press-effect:active { transform: scale(0.96); opacity: 0.8; }
+      @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .bottom-sheet { animation: slideUp 0.3s cubic-bezier(0, 0, 0.2, 1); }
+      .skeleton { background: linear-gradient(90deg, ${colors.border} 25%, ${colors.card} 50%, ${colors.border} 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; }
+      @keyframes skeleton-loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
     `;
     document.head.appendChild(s);
-  }, []);
+  }, [colors]);
 
-  if (!auth) return <LoginScreen onLogin={handleLogin} loading={loading} colors={colors} />;
+  if (!auth) return <LoginScreen onLogin={(creds) => {
+    if (creds.type === 'admin') {
+      if (creds.u.toLowerCase() === CONFIG.admin.username && creds.p === CONFIG.admin.password) {
+        setAuth({ id: 'admin', role: 'admin', name: 'Admin' });
+      } else showToast("Invalid Admin Login", "error");
+    } else {
+      setLoading(true);
+      supabase.from('employees').select('*').eq('employee_id_number', creds.u.toLowerCase()).eq('password', creds.p).maybeSingle()
+        .then(({data: agent}) => {
+          if (agent) setAuth({ id: agent.id, role: 'agent', name: agent.full_name, data: agent });
+          else showToast("Invalid Agent Credentials", "error");
+          setLoading(false);
+        });
+    }
+  }} colors={colors} />;
+
   if (!mode) return <ModeSelection setMode={setMode} colors={colors} onLogout={() => setAuth(null)} />;
 
   return (
-    <div style={{ ...styles.app, background: colors.bg, color: colors.text }}>
-      <div className="no-print">
-        <header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button onClick={() => setMode(null)} style={{ background: 'none', border: 'none', color: colors.text }}><ArrowLeftRight size={20}/></button>
-            <h1 style={{ fontSize: 16, fontWeight: '900' }}>{CONFIG.modes[mode].name}</h1>
-          </div>
-          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{ background: 'none', border: 'none' }}>
-            {theme === 'dark' ? <Sun size={20} color="#fff"/> : <Moon size={20} color="#000"/>}
-          </button>
-        </header>
+    <div style={{ minHeight: '100vh', background: colors.bg, color: colors.text }}>
+      {/* Header */}
+      <header style={{ 
+        padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+        position: 'sticky', top: 0, zIndex: 100, background: colors.glass, borderBottom: `1px solid ${colors.border}`,
+        ...sharedStyles.glass
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => { hapticFeedback(); setMode(null); }} className="press-effect" style={{ background: colors.card, border: 'none', borderRadius: 12, padding: 8, color: colors.text }}><ArrowLeftRight size={18}/></button>
+          <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: 0.5 }}>{CONFIG.modes[mode].name}</span>
+        </div>
+        <button onClick={() => { hapticFeedback(); setTheme(theme === 'dark' ? 'light' : 'dark'); }} style={{ background: 'none', border: 'none', color: colors.text }}>
+          {theme === 'dark' ? <Sun size={22}/> : <Moon size={22}/>}
+        </button>
+      </header>
 
-        <main style={styles.main}>
-          {auth.role === 'admin' ? 
-            <AdminPortal view={view} data={data} colors={colors} primary={primaryColor} mode={mode} onRefresh={fetchData} showToast={showToast} setBulkPrintList={setBulkPrintList} /> :
-            <AgentPortal view={view} profile={auth.data} data={data} colors={colors} primary={primaryColor} mode={mode} onRefresh={fetchData} showToast={showToast} />
-          }
-        </main>
+      {/* Main Content */}
+      <main style={{ padding: '20px 20px 120px', maxWidth: 600, margin: '0 auto' }}>
+        {auth.role === 'admin' ? 
+          <AdminPortal view={view} data={data} colors={colors} primary={primary} gradient={gradient} mode={mode} onRefresh={fetchData} showToast={showToast} setBulkPrintList={setBulkPrintList} /> :
+          <AgentPortal view={view} profile={auth.data} data={data} colors={colors} primary={primary} gradient={gradient} mode={mode} onRefresh={fetchData} showToast={showToast} />
+        }
+      </main>
 
-        <nav style={{ ...styles.nav, background: colors.card, borderColor: colors.border }}>
-          <NavBtn active={view === 'dashboard'} icon={<LayoutDashboard/>} label="Home" onClick={() => setView('dashboard')} colors={colors} primary={primaryColor} />
-          <NavBtn active={view === 'members'} icon={<Users/>} label="Members" onClick={() => setView('members')} colors={colors} primary={primaryColor} />
-          {auth.role === 'admin' && <NavBtn active={view === 'agents'} icon={<UserCheck/>} label="Agents" onClick={() => setView('agents')} colors={colors} primary={primaryColor} />}
-          {auth.role === 'agent' && <NavBtn active={view === 'scan'} icon={<Camera/>} label="Scan" onClick={() => setView('scan')} colors={colors} primary={primaryColor} />}
-          <NavBtn icon={<LogOut/>} label="Exit" onClick={() => setAuth(null)} colors={colors} primary={primaryColor} />
-        </nav>
-      </div>
+      {/* Navigation */}
+      <nav style={{ 
+        position: 'fixed', bottom: 20, left: 20, right: 20, height: 70, 
+        background: colors.glass, borderRadius: 24, display: 'flex', 
+        justifyContent: 'space-around', alignItems: 'center', border: `1px solid ${colors.border}`,
+        boxShadow: sharedStyles.shadow, zIndex: 100, ...sharedStyles.glass
+      }}>
+        <NavBtn active={view === 'dashboard'} icon={<LayoutDashboard/>} label="Home" onClick={() => setView('dashboard')} colors={colors} primary={primary} />
+        <NavBtn active={view === 'members'} icon={<Users/>} label="Members" onClick={() => setView('members')} colors={colors} primary={primary} />
+        {auth.role === 'admin' ? 
+          <NavBtn active={view === 'agents'} icon={<UserCheck/>} label="Agents" onClick={() => setView('agents')} colors={colors} primary={primary} /> :
+          <NavBtn active={view === 'scan'} icon={<Camera/>} label="Scan" onClick={() => setView('scan')} colors={colors} primary={primary} />
+        }
+        <NavBtn icon={<LogOut/>} label="Exit" onClick={() => { hapticFeedback('medium'); setAuth(null); }} colors={colors} primary={primary} />
+      </nav>
 
-      {bulkPrintList.length > 0 && <PrintView list={bulkPrintList} mode={mode} onClose={() => setBulkPrintList([])} />}
-      
-      <div style={{ position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
+      {/* Toasts */}
+      <div style={{ position: 'fixed', top: 80, left: 20, right: 20, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {toasts.map(t => (
-          <div key={t.id} style={{ padding: '12px 24px', borderRadius: 12, background: t.type === 'error' ? '#ef4444' : '#10b981', color: '#fff', marginBottom: 10, fontWeight: 'bold' }}>{t.message}</div>
+          <div key={t.id} style={{ 
+            padding: '16px 20px', borderRadius: 16, background: t.type === 'error' ? '#ef4444' : '#10b981', 
+            color: '#fff', fontWeight: '700', boxShadow: sharedStyles.shadow, display: 'flex', alignItems: 'center', gap: 10,
+            animation: 'fadeIn 0.3s ease-out'
+          }}>
+            {t.type === 'error' ? <AlertCircle size={20}/> : <CheckSquare size={20}/>}
+            {t.message}
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-/* ===================== LOGIN SCREEN (WITH TOGGLE & WHITE INPUTS) ===================== */
-
-const LoginScreen = ({ onLogin, loading, colors }) => {
-  const [type, setType] = useState('agent');
-  const tabStyle = (active) => ({ flex: 1, padding: 12, border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 'bold', background: active ? '#3b82f6' : 'none', color: active ? '#fff' : '#64748b' });
-
-  return (
-    <div style={{ background: colors.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ ...styles.modal, background: colors.card, border: `1px solid ${colors.border}`, textAlign: 'center' }}>
-        <Landmark size={48} color="#3b82f6" style={{ marginBottom: 10 }} />
-        <h2 style={{ color: colors.text, marginBottom: 25, letterSpacing: -1 }}>{CONFIG.business.name}</h2>
-        
-        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: 4, borderRadius: 14, marginBottom: 25, border: `1px solid ${colors.border}` }}>
-          <button onClick={() => setType('agent')} style={tabStyle(type === 'agent')}>Agent</button>
-          <button onClick={() => setType('admin')} style={tabStyle(type === 'admin')}>Admin</button>
-        </div>
-
-        <form onSubmit={e => { e.preventDefault(); onLogin({ u: e.target.u.value, p: e.target.p.value, type }); }}>
-          <input name="u" placeholder={type === 'admin' ? "Username" : "Agent ID"} style={{ ...styles.input, marginBottom: 10, border: `1px solid ${colors.border}` }} required />
-          <input name="p" type="password" placeholder="Password" style={{ ...styles.input, marginBottom: 20, border: `1px solid ${colors.border}` }} required />
-          <button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: '#3b82f6', width: '100%', height: 55 }}>
-            {loading ? "Authenticating..." : `Login as ${type}`}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-/* ===================== SCANNER COMPONENT (WHITE INPUTS) ===================== */
-
-const ScannerView = ({ profile, onRefresh, showToast, colors, primary, mode }) => {
-  const [active, setActive] = useState(false);
-  const [torchOn, setTorchOn] = useState(false);
-  const [manualId, setManualId] = useState('');
-  const [member, setMember] = useState(null);
-  const [amount, setAmount] = useState('');
-  const [processing, setProcessing] = useState(false);
-  
-  const scanLock = useRef(false);
-
-  const lookupMember = async (id) => {
-    if (!id || scanLock.current) return;
-    scanLock.current = true;
-    const { data: m } = await supabase.from(CONFIG.modes[mode].membersTable).select('*').or(`registration_no.eq.${id.toUpperCase()},id.eq.${id}`).maybeSingle();
-    if (m) {
-      if (navigator.vibrate) navigator.vibrate(100);
-      setMember(m);
-      setAmount(m.expected_amount || '');
-      setActive(false);
-      setTorchOn(false);
-    } else showToast("Member not found", "error");
-    setTimeout(() => { scanLock.current = false; }, 2000);
-  };
-
-  if (member) return (
-    <div style={{ ...styles.card, background: colors.card, textAlign: 'center', paddingTop: 40, animation: 'fadeIn 0.3s' }}>
-      <button onClick={() => setMember(null)} style={{ position:'absolute', top: 20, right: 20, background:'none', border:'none', color:colors.textSecondary }}><X/></button>
-      <div style={{ background: primary, color: '#fff', display: 'inline-block', padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 'bold' }}>{member.registration_no}</div>
-      <h2 style={{ margin: '15px 0 5px' }}>{member.full_name}</h2>
-      <input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={styles.bigInput} autoFocus />
-      <button onClick={async () => {
-        setProcessing(true);
-        const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([{ contributor_id: member.id, full_name: member.full_name, registration_no: member.registration_no, amount: Number(amount), employee_id: profile?.id, employee_name: profile?.full_name, expected_amount: member.expected_amount }]);
-        if (!error) { showToast("Success", "success"); setMember(null); onRefresh(); }
-        setProcessing(false);
-      }} disabled={processing} style={{ ...styles.btnPrimary, background: primary, width: '100%', height: 60 }}>
-        {processing ? "Saving..." : "Confirm Collection"}
-      </button>
-    </div>
-  );
-
-  if (active) return (
-    <div style={styles.scanContainer}>
-      <div style={{ padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', zIndex: 2001 }}>
-        <h3 style={{ color: '#fff', margin: 0 }}>Scan QR Code</h3>
-        <button onClick={() => { setActive(false); setTorchOn(false); }} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 45, height: 45, borderRadius: '50%' }}><X/></button>
-      </div>
-      <div style={{ flex: 1, position: 'relative' }}>
-        <Scanner onScan={(res) => res?.[0] && lookupMember(res[0].rawValue)} styles={{ container: { width: '100%', height: '100%' } }} components={{ finder: false, audio: false }} constraints={{ facingMode: 'environment', advanced: [{ torch: torchOn }] }} />
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-          <div style={{ width: 250, height: 250, position: 'relative' }}>
-            <div className="scanner-overlay"></div>
-            <div className="scanner-laser"></div>
-          </div>
-        </div>
-        <div style={{ position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 2002 }}>
-          <button onClick={() => setTorchOn(!torchOn)} style={{ width: 64, height: 64, borderRadius: '50%', background: torchOn ? '#fbbf24' : 'rgba(255,255,255,0.2)', border: 'none', color: torchOn ? '#000' : '#fff', display:'flex', alignItems:'center', justifyContent:'center' }}>
-            {torchOn ? <ZapOff size={28} /> : <Zap size={28} />}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={{ animation: 'fadeIn 0.4s ease' }}>
-      <div style={{ ...styles.card, background: colors.card, borderColor: colors.border, padding: '60px 20px', textAlign: 'center' }}>
-        <div style={{ width: 80, height: 80, borderRadius: '50%', background: primary + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', color: primary }}><Camera size={40}/></div>
-        <h2 style={{ margin: '0 0 10px 0' }}>Daily Collection</h2>
-        <button onClick={() => setActive(true)} style={{ ...styles.btnPrimary, background: primary, width: '100%', height: 60, fontSize: 18, marginBottom: 15 }}><QrCode/> Open Scanner</button>
-      </div>
-      <div style={{ textAlign: 'center', margin: '20px 0', fontSize: 12, opacity: 0.4, fontWeight: 'bold' }}>OR ENTER MANUALLY</div>
-      <div style={{ display: 'flex', gap: 10 }}>
-        <input placeholder="Member ID" value={manualId} onChange={e => setManualId(e.target.value)} style={{ ...styles.input, borderColor: colors.border }} />
-        <button onClick={() => lookupMember(manualId)} style={{ ...styles.btnPrimary, background: primary, padding: '0 20px' }}><ChevronRight/></button>
-      </div>
-    </div>
-  );
-};
-
-/* ===================== SHARED COMPONENTS ===================== */
+/* ===================== SUB-COMPONENTS (UPGRADED UI) ===================== */
 
 const NavBtn = ({ active, icon, label, onClick, colors, primary }) => (
-  <button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? primary : colors.textSecondary }}>
-    {React.cloneElement(icon, { size: 22 })}
-    <span style={{ fontSize: 10, fontWeight: active ? 'bold' : 'normal' }}>{label}</span>
+  <button onClick={() => { hapticFeedback(); onClick(); }} style={{ 
+    ...sharedStyles.btn, background: 'none', flexDirection: 'column', gap: 4, 
+    color: active ? primary : colors.textSecondary, width: 60 
+  }}>
+    <div style={{ 
+      transition: 'all 0.3s', 
+      transform: active ? 'translateY(-2px)' : 'none',
+      color: active ? primary : colors.textSecondary 
+    }}>{React.cloneElement(icon, { size: active ? 24 : 22, strokeWidth: active ? 2.5 : 2 })}</div>
+    <span style={{ fontSize: 10, fontWeight: active ? 800 : 500 }}>{label}</span>
   </button>
 );
 
-const TransactionList = ({ transactions, colors, primary }) => (
-  <div>
-    {transactions.map(t => (
-      <div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-        <div style={{ width: 40, height: 40, borderRadius: 12, background: primary + '15', color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 15 }}><CreditCard size={20}/></div>
-        <div style={{ flex: 1 }}><strong>{t.full_name}</strong><div style={{ fontSize: 11, opacity: 0.5 }}>By {t.employee_name || 'Admin'}</div></div>
-        <div style={{ fontWeight: 'bold', color: primary }}>₦{t.amount?.toLocaleString()}</div>
-      </div>
-    ))}
+const StatCard = ({ label, value, icon, gradient, colors, subtext }) => (
+  <div style={{ 
+    padding: 24, borderRadius: 28, background: gradient, color: '#fff', 
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', position: 'relative', overflow: 'hidden'
+  }}>
+    <div style={{ position: 'absolute', top: -10, right: -10, opacity: 0.1 }}>{React.cloneElement(icon, { size: 120 })}</div>
+    <div style={{ opacity: 0.8, fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>{label.toUpperCase()}</div>
+    <div style={{ fontSize: 32, fontWeight: 900, margin: '8px 0' }}>{value}</div>
+    {subtext && <div style={{ fontSize: 12, background: 'rgba(255,255,255,0.2)', display: 'inline-block', padding: '4px 12px', borderRadius: 12 }}>{subtext}</div>}
   </div>
 );
 
-const AdminPortal = ({ view, data, colors, primary, mode, onRefresh, showToast, setBulkPrintList }) => {
+const AdminPortal = ({ view, data, colors, primary, gradient, mode, onRefresh, showToast, setBulkPrintList }) => {
   if (view === 'dashboard') {
     const today = new Date().toISOString().slice(0, 10);
     const todayTotal = data.transactions.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0);
     return (
-      <div style={{ animation: 'fadeIn 0.4s' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-          <div style={{ ...styles.card, background: primary, border: 'none', color: '#fff' }}><small>TODAY</small><h2 style={{ margin: 0 }}>₦{todayTotal.toLocaleString()}</h2></div>
-          <div style={{ ...styles.card, background: colors.card, borderColor: colors.border }}><small>MEMBERS</small><h2 style={{ margin: 0 }}>{data.members.length}</h2></div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <StatCard label="Collections Today" value={formatCurrency(todayTotal)} icon={<TrendingUp/>} gradient={gradient} colors={colors} subtext={`${data.transactions.filter(t => t.created_at.startsWith(today)).length} deposits`} />
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+          <div style={{ background: colors.card, padding: 20, borderRadius: 24, border: `1px solid ${colors.border}` }}>
+            <div style={{ color: colors.textSecondary, fontSize: 11, fontWeight: 700, marginBottom: 5 }}>TOTAL MEMBERS</div>
+            <div style={{ fontSize: 24, fontWeight: 800 }}>{data.members.length}</div>
+          </div>
+          <div style={{ background: colors.card, padding: 20, borderRadius: 24, border: `1px solid ${colors.border}` }}>
+            <div style={{ color: colors.textSecondary, fontSize: 11, fontWeight: 700, marginBottom: 5 }}>ACTIVE AGENTS</div>
+            <div style={{ fontSize: 24, fontWeight: 800 }}>{data.agents.length}</div>
+          </div>
         </div>
-        <h3 style={{ marginBottom: 15, display:'flex', alignItems:'center', gap:8 }}><TrendingUp size={18}/> Recent Activity</h3>
-        <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} primary={primary} />
+
+        <h3 style={{ margin: '10px 0 0', fontSize: 18, fontWeight: 800 }}>Recent Transactions</h3>
+        <TransactionList transactions={data.transactions.slice(0, 8)} colors={colors} primary={primary} />
       </div>
     );
   }
+
   if (view === 'members') return <MemberManager data={data} colors={colors} primary={primary} mode={mode} onRefresh={onRefresh} showToast={showToast} setBulkPrintList={setBulkPrintList} isAdmin={true} />;
   if (view === 'agents') return <AgentManager agents={data.agents} onRefresh={onRefresh} colors={colors} primary={primary} />;
 };
 
-const AgentPortal = ({ view, profile, data, colors, primary, mode, onRefresh, showToast }) => {
+const AgentPortal = ({ view, profile, data, colors, primary, gradient, mode, onRefresh, showToast }) => {
   if (view === 'dashboard') {
     const today = new Date().toISOString().slice(0, 10);
     const myTs = data.transactions.filter(t => t.employee_id === profile?.id && t.created_at.startsWith(today));
+    const total = myTs.reduce((s, t) => s + (t.amount || 0), 0);
     return (
-      <div style={{ animation: 'fadeIn 0.4s' }}>
-        <div style={{ ...styles.card, background: primary, color: '#fff', textAlign: 'center', padding: 40, border: 'none' }}>
-          <small style={{ opacity: 0.8 }}>MY COLLECTIONS TODAY</small>
-          <h1 style={{ fontSize: 42, margin: '10px 0' }}>₦{myTs.reduce((s, t) => s + (t.amount || 0), 0).toLocaleString()}</h1>
-          <div style={{ background: 'rgba(0,0,0,0.1)', display: 'inline-block', padding: '4px 12px', borderRadius: 20 }}>{myTs.length} Records</div>
-        </div>
-        <h3 style={{ marginBottom: 15 }}><Calendar size={18}/> My Recent Activity</h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <StatCard label="My Daily Total" value={formatCurrency(total)} icon={<Wallet/>} gradient={gradient} colors={colors} subtext={`${myTs.length} collections`} />
+        <h3 style={{ margin: '10px 0 0', fontSize: 18, fontWeight: 800 }}>My Recent Work</h3>
         <TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} primary={primary} />
       </div>
     );
@@ -333,122 +296,463 @@ const AgentPortal = ({ view, profile, data, colors, primary, mode, onRefresh, sh
   if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} primary={primary} mode={mode} />;
 };
 
+/* ===================== MEMBER MANAGER (WITH DELETE & PHONE) ===================== */
+
 const MemberManager = ({ data, colors, primary, mode, onRefresh, showToast, setBulkPrintList, isAdmin }) => {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState([]);
-  const [form, setForm] = useState({ show: false, m: null });
-  const filtered = data.members.filter(m => m.full_name.toLowerCase().includes(query.toLowerCase()) || m.registration_no.includes(query.toUpperCase()));
+  const [editingMember, setEditingMember] = useState(null);
+  const [isAdding, setIsAdding] = useState(false);
+
+  const filtered = data.members.filter(m => 
+    m.full_name.toLowerCase().includes(query.toLowerCase()) || 
+    m.registration_no.includes(query.toUpperCase()) ||
+    m.phone_number?.includes(query)
+  );
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 10, background: colors.card, padding: 12, borderRadius: 16, border: `1px solid ${colors.border}`, marginBottom: 15, alignItems: 'center' }}>
-        <Search size={18} opacity={0.5}/><input placeholder="Search members..." value={query} onChange={e => setQuery(e.target.value)} style={{ border: 'none', background: 'none', color: '#ffffff', outline: 'none', flex: 1 }} />
+      {/* Search Bar */}
+      <div style={{ 
+        display: 'flex', gap: 12, background: colors.card, padding: '12px 16px', 
+        borderRadius: 20, border: `1px solid ${colors.border}`, marginBottom: 20, 
+        alignItems: 'center', ...sharedStyles.glass 
+      }}>
+        <Search size={20} color={colors.textSecondary}/>
+        <input 
+          placeholder="Name, ID or Phone..." 
+          value={query} 
+          onChange={e => setQuery(e.target.value)} 
+          style={{ border: 'none', background: 'none', color: colors.text, outline: 'none', flex: 1, fontSize: 16 }} 
+        />
       </div>
-      {isAdmin && <button onClick={() => setForm({ show: true, m: null })} style={{ ...styles.btnPrimary, background: primary, width: '100%', marginBottom: 15 }}><UserPlus size={18}/> Add New Member</button>}
+
+      {isAdmin && (
+        <button onClick={() => { hapticFeedback(); setIsAdding(true); }} style={{ 
+          ...sharedStyles.btn, background: primary, color: '#fff', width: '100%', 
+          height: 56, borderRadius: 18, marginBottom: 20, boxShadow: sharedStyles.shadow 
+        }}>
+          <UserPlus size={20}/> Add New Member
+        </button>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {filtered.map(m => (
+          <div key={m.id} 
+            onClick={() => {
+              if (isAdmin) {
+                hapticFeedback();
+                setSelected(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]);
+              }
+            }}
+            style={{ 
+              background: colors.card, padding: 16, borderRadius: 24, border: `1px solid ${selected.includes(m.id) ? primary : colors.border}`,
+              display: 'flex', alignItems: 'center', gap: 15, transition: 'all 0.2s', ...sharedStyles.glass
+            }}
+          >
+            {isAdmin && (selected.includes(m.id) ? <CheckSquare size={22} color={primary}/> : <Square size={22} color={colors.textSecondary} opacity={0.5}/>)}
+            
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>{m.full_name}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 15px', marginTop: 4 }}>
+                <div style={{ fontSize: 12, color: colors.textSecondary, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Zap size={12}/> {m.registration_no}
+                </div>
+                {m.phone_number && (
+                  <div style={{ fontSize: 12, color: primary, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Phone size={12}/> {m.phone_number}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontWeight: 900, color: colors.text }}>₦{m.expected_amount?.toLocaleString()}</div>
+              {isAdmin && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); hapticFeedback(); setEditingMember(m); }}
+                  style={{ background: 'none', border: 'none', color: colors.textSecondary, padding: '8px 0 8px 8px' }}
+                >
+                  <MoreVertical size={20}/>
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Floating Action for Bulk Printing */}
       {selected.length > 0 && (
-        <div style={{ position:'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: 400, background: primary, padding: 15, borderRadius: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1000 }}>
-          <span style={{ color: '#fff', fontWeight: 'bold' }}>{selected.length} Selected</span>
-          <button onClick={() => setBulkPrintList(data.members.filter(m => selected.includes(m.id)))} style={{ background: '#fff', color: primary, border: 'none', padding: '8px 15px', borderRadius: 10, fontWeight: 'bold' }}>Print IDs</button>
+        <div style={{ 
+          position: 'fixed', bottom: 100, left: 30, right: 30, background: primary, 
+          padding: '12px 20px', borderRadius: 20, display: 'flex', justifyContent: 'space-between', 
+          alignItems: 'center', color: '#fff', boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+          animation: 'slideUp 0.3s ease'
+        }}>
+          <span style={{ fontWeight: 800 }}>{selected.length} Selected</span>
+          <button onClick={() => setBulkPrintList(data.members.filter(m => selected.includes(m.id)))} style={{ background: '#fff', color: primary, border: 'none', padding: '8px 16px', borderRadius: 12, fontWeight: 800 }}>Print IDs</button>
         </div>
       )}
-      {filtered.map(m => (
-        <div key={m.id} onClick={() => isAdmin && setSelected(s => s.includes(m.id) ? s.filter(i => i !== m.id) : [...s, m.id])} style={{ ...styles.listItem, background: colors.card, borderColor: selected.includes(m.id) ? primary : colors.border }}>
-          {isAdmin && <div style={{ marginRight: 15 }}>{selected.includes(m.id) ? <CheckSquare size={20} color={primary}/> : <Square size={20} opacity={0.3}/>}</div>}
-          <div style={{ flex: 1 }}><strong>{m.full_name}</strong><div style={{ fontSize: 12, opacity: 0.5 }}>{m.registration_no} • ₦{m.expected_amount}</div></div>
-          {isAdmin && <button onClick={(e) => { e.stopPropagation(); setForm({ show: true, m }); }} style={{ background: 'none', border: 'none', color: primary }}><Edit3 size={18}/></button>}
+
+      {/* Member Form (Bottom Sheet) */}
+      {(isAdding || editingMember) && (
+        <BottomSheet onClose={() => { setIsAdding(false); setEditingMember(null); }} colors={colors}>
+          <MemberForm 
+            member={editingMember} 
+            mode={mode} 
+            primary={primary} 
+            colors={colors} 
+            onClose={() => { setIsAdding(false); setEditingMember(null); }} 
+            onRefresh={onRefresh}
+            showToast={showToast}
+          />
+        </BottomSheet>
+      )}
+    </div>
+  );
+};
+
+const MemberForm = ({ member, mode, primary, colors, onClose, onRefresh, showToast }) => {
+  const [loading, setLoading] = useState(false);
+  const isEdit = !!member;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const fd = new FormData(e.target);
+    const payload = {
+      full_name: fd.get('name'),
+      registration_no: fd.get('reg').toUpperCase(),
+      phone_number: fd.get('phone'),
+      address: fd.get('address'),
+      expected_amount: Number(fd.get('amount')),
+      ajo_owner_id: 'admin'
+    };
+
+    const { error } = isEdit 
+      ? await supabase.from(CONFIG.modes[mode].membersTable).update(payload).eq('id', member.id)
+      : await supabase.from(CONFIG.modes[mode].membersTable).insert([payload]);
+
+    if (!error) {
+      showToast(isEdit ? "Updated successfully" : "Member added", "success");
+      onRefresh();
+      onClose();
+    } else {
+      showToast(error.message, "error");
+    }
+    setLoading(false);
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Are you sure you want to delete ${member.full_name}?`)) return;
+    setLoading(true);
+    const { error } = await supabase.from(CONFIG.modes[mode].membersTable).delete().eq('id', member.id);
+    if (!error) {
+      showToast("Member deleted", "success");
+      onRefresh();
+      onClose();
+    }
+    setLoading(false);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+      <h2 style={{ margin: '0 0 10px', fontWeight: 900 }}>{isEdit ? 'Edit Member' : 'New Member'}</h2>
+      
+      <div className="form-group">
+        <label style={labelStyle}>FULL NAME</label>
+        <input name="name" defaultValue={member?.full_name} placeholder="e.g. John Doe" style={inputStyle(colors)} required />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+        <div className="form-group">
+          <label style={labelStyle}>REG NO / ID</label>
+          <input name="reg" defaultValue={member?.registration_no} placeholder="ABC-123" style={inputStyle(colors)} required />
         </div>
-      ))}
-      {form.show && (
-        <div style={styles.overlay}>
-          <div style={{ ...styles.modal, background: colors.card }}>
-            <h3 style={{color: '#fff'}}>Member Details</h3>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const fd = new FormData(e.target);
-              const p = { full_name: fd.get('n'), registration_no: fd.get('r'), expected_amount: Number(fd.get('a')), ajo_owner_id: 'admin' };
-              const { error } = form.m ? await supabase.from(CONFIG.modes[mode].membersTable).update(p).eq('id', form.m.id) : await supabase.from(CONFIG.modes[mode].membersTable).insert([p]);
-              if (!error) { setForm({ show: false }); onRefresh(); }
-            }}>
-              <input name="n" defaultValue={form.m?.full_name} placeholder="Name" style={{ ...styles.input, marginBottom: 10, border: `1px solid ${colors.border}` }} required />
-              <input name="r" defaultValue={form.m?.registration_no} placeholder="Reg No" style={{ ...styles.input, marginBottom: 10, border: `1px solid ${colors.border}` }} required />
-              <input name="a" type="number" defaultValue={form.m?.expected_amount} placeholder="Amount" style={{ ...styles.input, marginBottom: 20, border: `1px solid ${colors.border}` }} required />
-              <div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: primary, flex: 1 }}>Save</button><button type="button" onClick={() => setForm({ show: false })} style={{ ...styles.btnSecondary, flex: 1 }}>Cancel</button></div>
-            </form>
+        <div className="form-group">
+          <label style={labelStyle}>DAILY AMOUNT (₦)</label>
+          <input name="amount" type="number" defaultValue={member?.expected_amount} placeholder="1000" style={inputStyle(colors)} required />
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label style={labelStyle}>PHONE NUMBER</label>
+        <input name="phone" type="tel" defaultValue={member?.phone_number} placeholder="0810 000 0000" style={inputStyle(colors)} />
+      </div>
+
+      <div className="form-group">
+        <label style={labelStyle}>HOME ADDRESS</label>
+        <textarea name="address" defaultValue={member?.address} rows={2} placeholder="Residential address..." style={{ ...inputStyle(colors), resize: 'none' }} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
+        <button type="submit" disabled={loading} style={{ ...sharedStyles.btn, background: primary, color: '#fff', flex: 2, height: 56, borderRadius: 16 }}>
+          {loading ? 'Saving...' : 'Save Member'}
+        </button>
+        {isEdit && (
+          <button type="button" onClick={handleDelete} style={{ ...sharedStyles.btn, background: '#ef444420', color: '#ef4444', flex: 1, borderRadius: 16 }}>
+            <Trash2 size={20}/>
+          </button>
+        )}
+      </div>
+    </form>
+  );
+};
+
+/* ===================== UI COMPONENTS ===================== */
+
+const BottomSheet = ({ children, onClose, colors }) => (
+  <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}>
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} />
+    <div className="bottom-sheet" style={{ 
+      width: '100%', background: colors.cardSolid, borderTopLeftRadius: 32, borderTopRightRadius: 32, 
+      padding: '30px 24px 50px', position: 'relative', boxShadow: '0 -10px 40px rgba(0,0,0,0.2)' 
+    }}>
+      <div style={{ width: 40, height: 5, background: colors.border, borderRadius: 10, margin: '-15px auto 20px' }} />
+      {children}
+    </div>
+  </div>
+);
+
+const TransactionList = ({ transactions, colors, primary }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    {transactions.length === 0 && <div style={{ padding: 40, textAlign: 'center', opacity: 0.5 }}>No records found</div>}
+    {transactions.map(t => (
+      <div key={t.id} style={{ 
+        display: 'flex', alignItems: 'center', gap: 15, padding: 16, background: colors.card, 
+        borderRadius: 20, border: `1px solid ${colors.border}`, ...sharedStyles.glass
+      }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: primary + '15', color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ArrowUpRight size={22}/>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700 }}>{t.full_name}</div>
+          <div style={{ fontSize: 11, color: colors.textSecondary }}>{new Date(t.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} • by {t.employee_name || 'Admin'}</div>
+        </div>
+        <div style={{ fontWeight: 900, fontSize: 15 }}>{formatCurrency(t.amount)}</div>
+      </div>
+    ))}
+  </div>
+);
+
+const labelStyle = { fontSize: 10, fontWeight: 800, color: '#94a3b8', marginBottom: 6, display: 'block', letterSpacing: 1 };
+const inputStyle = (colors) => ({
+  width: '100%', padding: '14px 16px', borderRadius: 14, border: `1px solid ${colors.border}`,
+  background: colors.bg, color: colors.text, fontSize: 16, outline: 'none'
+});
+
+const ModeSelection = ({ setMode, colors, onLogout }) => (
+  <div style={{ background: colors.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 25 }}>
+    <div style={{ width: '100%', maxWidth: 400 }}>
+      <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <div style={{ width: 80, height: 80, background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', borderRadius: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 15px 30px rgba(59, 130, 246, 0.4)' }}>
+          <Landmark size={40} color="#fff" />
+        </div>
+        <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Portal Select</h1>
+        <p style={{ color: colors.textSecondary, marginTop: 8 }}>Choose your operational system</p>
+      </div>
+      
+      <div style={{ display: 'grid', gap: 16 }}>
+        <button onClick={() => { hapticFeedback('medium'); setMode('ajo'); }} className="press-effect" style={{ 
+          ...sharedStyles.btn, height: 140, background: CONFIG.modes.ajo.gradient, color: '#fff', 
+          borderRadius: 30, flexDirection: 'column', fontSize: 18, boxShadow: '0 10px 25px rgba(59, 130, 246, 0.2)' 
+        }}>
+          <Wallet size={32}/> AJO SYSTEM
+        </button>
+        <button onClick={() => { hapticFeedback('medium'); setMode('loans'); }} className="press-effect" style={{ 
+          ...sharedStyles.btn, height: 140, background: CONFIG.modes.loans.gradient, color: '#fff', 
+          borderRadius: 30, flexDirection: 'column', fontSize: 18, boxShadow: '0 10px 25px rgba(239, 68, 68, 0.2)' 
+        }}>
+          <HandCoins size={32}/> LOAN SYSTEM
+        </button>
+      </div>
+
+      <button onClick={onLogout} style={{ width: '100%', marginTop: 30, background: 'none', border: 'none', color: colors.textSecondary, fontWeight: 700 }}>Log Out</button>
+    </div>
+  </div>
+);
+
+const LoginScreen = ({ onLogin, colors }) => {
+  const [type, setType] = useState('agent');
+  return (
+    <div style={{ background: colors.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 25 }}>
+      <div style={{ width: '100%', maxWidth: 400, background: colors.card, padding: 30, borderRadius: 32, border: `1px solid ${colors.border}`, ...sharedStyles.glass }}>
+        <div style={{ textAlign: 'center', marginBottom: 30 }}>
+          <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 5 }}>Welcome Back</h2>
+          <p style={{ color: colors.textSecondary, fontSize: 14 }}>{CONFIG.business.name}</p>
+        </div>
+
+        <div style={{ display: 'flex', background: colors.bg, padding: 6, borderRadius: 16, marginBottom: 25, border: `1px solid ${colors.border}` }}>
+          <button onClick={() => setType('agent')} style={{ flex: 1, padding: 12, border: 'none', borderRadius: 12, fontWeight: 800, background: type === 'agent' ? '#3b82f6' : 'none', color: type === 'agent' ? '#fff' : colors.textSecondary }}>Agent</button>
+          <button onClick={() => setType('admin')} style={{ flex: 1, padding: 12, border: 'none', borderRadius: 12, fontWeight: 800, background: type === 'admin' ? '#3b82f6' : 'none', color: type === 'admin' ? '#fff' : colors.textSecondary }}>Admin</button>
+        </div>
+
+        <form onSubmit={e => {
+          e.preventDefault();
+          onLogin({ u: e.target.u.value, p: e.target.p.value, type });
+        }}>
+          <div className="form-group" style={{ marginBottom: 15 }}>
+            <label style={labelStyle}>{type === 'admin' ? 'USERNAME' : 'AGENT ID'}</label>
+            <input name="u" style={inputStyle(colors)} required />
+          </div>
+          <div className="form-group" style={{ marginBottom: 25 }}>
+            <label style={labelStyle}>PASSWORD</label>
+            <input name="p" type="password" style={inputStyle(colors)} required />
+          </div>
+          <button type="submit" style={{ ...sharedStyles.btn, width: '100%', height: 56, background: '#3b82f6', color: '#fff', borderRadius: 16, fontSize: 16 }}>Sign In</button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const ScannerView = ({ profile, onRefresh, showToast, colors, primary, mode }) => {
+  const [active, setActive] = useState(false);
+  const [member, setMember] = useState(null);
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const lookupMember = async (id) => {
+    if (!id) return;
+    const { data: m } = await supabase.from(CONFIG.modes[mode].membersTable).select('*').or(`registration_no.eq.${id.toUpperCase()},id.eq.${id}`).maybeSingle();
+    if (m) {
+      hapticFeedback('success');
+      setMember(m);
+      setAmount(m.expected_amount || '');
+      setActive(false);
+    } else {
+      hapticFeedback('error');
+      showToast("Member not found", "error");
+    }
+  };
+
+  if (member) return (
+    <div style={{ background: colors.card, padding: 30, borderRadius: 32, textAlign: 'center', border: `1px solid ${colors.border}`, ...sharedStyles.glass }}>
+      <div style={{ opacity: 0.5, fontSize: 12, fontWeight: 800 }}>MEMBER IDENTIFIED</div>
+      <h2 style={{ margin: '10px 0', fontSize: 24, fontWeight: 900 }}>{member.full_name}</h2>
+      <div style={{ fontSize: 14, color: primary, fontWeight: 800, marginBottom: 20 }}>{member.registration_no}</div>
+      
+      <div style={{ marginBottom: 30 }}>
+        <label style={labelStyle}>COLLECTION AMOUNT</label>
+        <input 
+          type="number" 
+          value={amount} 
+          onChange={e => setAmount(e.target.value)} 
+          style={{ width: '100%', fontSize: 42, textAlign: 'center', background: 'none', border: 'none', borderBottom: `2px solid ${primary}`, color: colors.text, fontWeight: 900, outline: 'none' }}
+          autoFocus 
+        />
+      </div>
+
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button 
+          onClick={async () => {
+            setLoading(true);
+            const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([{ 
+              contributor_id: member.id, 
+              full_name: member.full_name, 
+              registration_no: member.registration_no, 
+              amount: Number(amount), 
+              employee_id: profile?.id, 
+              employee_name: profile?.full_name 
+            }]);
+            if (!error) {
+              showToast("Collection Saved", "success");
+              setMember(null);
+              onRefresh();
+            }
+            setLoading(false);
+          }}
+          disabled={loading}
+          style={{ ...sharedStyles.btn, background: primary, color: '#fff', flex: 2, height: 60, borderRadius: 20 }}
+        >
+          {loading ? 'Processing...' : 'Confirm Deposit'}
+        </button>
+        <button onClick={() => setMember(null)} style={{ ...sharedStyles.btn, background: colors.bg, color: colors.text, flex: 1, borderRadius: 20 }}>Cancel</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ background: colors.card, padding: 40, borderRadius: 32, border: `2px dashed ${colors.border}`, marginBottom: 25 }}>
+        <div style={{ width: 80, height: 80, background: primary + '15', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', color: primary }}>
+          <Camera size={40}/>
+        </div>
+        <h2 style={{ margin: '0 0 10px', fontWeight: 900 }}>Quick Collect</h2>
+        <p style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 25 }}>Scan member QR code or enter ID manually to record deposit</p>
+        <button onClick={() => setActive(true)} style={{ ...sharedStyles.btn, background: primary, color: '#fff', width: '100%', height: 60, borderRadius: 20 }}>
+          <QrCode/> Start Scanning
+        </button>
+      </div>
+
+      {active && (
+        <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 2000 }}>
+          <Scanner onScan={(res) => res?.[0] && lookupMember(res[0].rawValue)} />
+          <button onClick={() => setActive(false)} style={{ position: 'absolute', top: 30, right: 30, background: '#fff', border: 'none', borderRadius: '50%', width: 50, height: 50 }}><X/></button>
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 250, height: 250, border: '2px solid #fff', borderRadius: 20 }}>
+             <div style={{ position: 'absolute', top: 0, width: '100%', height: 2, background: '#ef4444', boxShadow: '0 0 15px #ef4444', animation: 'scan-line 2s infinite' }} />
           </div>
         </div>
       )}
+
+      <div style={{ display: 'flex', gap: 12 }}>
+        <input placeholder="Enter ID Manually..." id="manID" style={inputStyle(colors)} />
+        <button onClick={() => lookupMember(document.getElementById('manID').value)} style={{ ...sharedStyles.btn, background: colors.cardSolid, color: colors.text, width: 60, borderRadius: 14, border: `1px solid ${colors.border}` }}>
+          <ChevronRight/>
+        </button>
+      </div>
     </div>
   );
 };
 
 const AgentManager = ({ agents, onRefresh, colors, primary }) => {
-  const [form, setForm] = useState({ show: false, a: null });
+  const [editingAgent, setEditingAgent] = useState(null);
+  const [isAdding, setIsAdding] = useState(false);
+
   return (
     <div>
-      <button onClick={() => setForm({ show: true, a: null })} style={{ ...styles.btnPrimary, background: primary, width: '100%', marginBottom: 15 }}><UserPlus size={18}/> Register Agent</button>
-      {agents.map(a => (
-        <div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-          <div style={{ flex: 1 }}><strong>{a.full_name}</strong><div style={{ fontSize: 12, opacity: 0.5 }}>ID: {a.employee_id_number}</div></div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setForm({ show: true, a })} style={{ background: 'none', border: 'none', color: primary }}><Edit3 size={18}/></button>
-            <button onClick={async () => { if (window.confirm("Delete agent?")) await supabase.from('employees').delete().eq('id', a.id); onRefresh(); }} style={{ background: 'none', border: 'none', color: '#ef4444' }}><Trash2 size={18}/></button>
+      <button onClick={() => setIsAdding(true)} style={{ ...sharedStyles.btn, background: primary, color: '#fff', width: '100%', height: 56, borderRadius: 18, marginBottom: 20 }}>
+        <UserPlus size={20}/> Register New Agent
+      </button>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {agents.map(a => (
+          <div key={a.id} style={{ 
+            background: colors.card, padding: 16, borderRadius: 24, border: `1px solid ${colors.border}`,
+            display: 'flex', alignItems: 'center', gap: 15, ...sharedStyles.glass
+          }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>
+              {a.full_name.charAt(0)}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800 }}>{a.full_name}</div>
+              <div style={{ fontSize: 12, opacity: 0.5 }}>ID: {a.employee_id_number}</div>
+            </div>
+            <button onClick={() => setEditingAgent(a)} style={{ background: 'none', border: 'none', color: primary }}><Edit3 size={18}/></button>
           </div>
-        </div>
-      ))}
-      {form.show && (
-        <div style={styles.overlay}>
-          <div style={{ ...styles.modal, background: colors.card }}>
-            <h3 style={{color: '#fff'}}>Agent Profile</h3>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const fd = new FormData(e.target);
-              const p = { full_name: fd.get('n'), employee_id_number: fd.get('e').toLowerCase(), password: fd.get('p') };
-              const { error } = form.a ? await supabase.from('employees').update(p).eq('id', form.a.id) : await supabase.from('employees').insert([p]);
-              if (!error) { setForm({ show: false }); onRefresh(); }
-            }}>
-              <input name="n" defaultValue={form.a?.full_name} placeholder="Agent Name" style={{ ...styles.input, marginBottom: 10, border: `1px solid ${colors.border}` }} required />
-              <input name="e" defaultValue={form.a?.employee_id_number} placeholder="Agent ID" style={{ ...styles.input, marginBottom: 10, border: `1px solid ${colors.border}` }} required />
-              <input name="p" defaultValue={form.a?.password} placeholder="Password" style={{ ...styles.input, marginBottom: 20, border: `1px solid ${colors.border}` }} required />
-              <div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: primary, flex: 1 }}>Save</button><button type="button" onClick={() => setForm({ show: false })} style={{ ...styles.btnSecondary, flex: 1 }}>Cancel</button></div>
-            </form>
-          </div>
-        </div>
+        ))}
+      </div>
+
+      {(isAdding || editingAgent) && (
+        <BottomSheet onClose={() => { setIsAdding(false); setEditingAgent(null); }} colors={colors}>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const p = { full_name: fd.get('n'), employee_id_number: fd.get('e').toLowerCase(), password: fd.get('p') };
+            const { error } = editingAgent ? await supabase.from('employees').update(p).eq('id', editingAgent.id) : await supabase.from('employees').insert([p]);
+            if (!error) { setIsAdding(false); setEditingAgent(null); onRefresh(); }
+          }}>
+            <h2 style={{ margin: '0 0 20px', fontWeight: 900 }}>Agent Profile</h2>
+            <label style={labelStyle}>FULL NAME</label>
+            <input name="n" defaultValue={editingAgent?.full_name} style={{ ...inputStyle(colors), marginBottom: 15 }} required />
+            <label style={labelStyle}>AGENT LOGIN ID</label>
+            <input name="e" defaultValue={editingAgent?.employee_id_number} style={{ ...inputStyle(colors), marginBottom: 15 }} required />
+            <label style={labelStyle}>ACCESS PASSWORD</label>
+            <input name="p" defaultValue={editingAgent?.password} style={{ ...inputStyle(colors), marginBottom: 25 }} required />
+            <button type="submit" style={{ ...sharedStyles.btn, background: primary, color: '#fff', width: '100%', height: 56, borderRadius: 16 }}>Save Agent</button>
+          </form>
+        </BottomSheet>
       )}
     </div>
   );
 };
-
-const ModeSelection = ({ setMode, colors, onLogout }) => (
-  <div style={{ background: colors.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-    <div style={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
-      <h2 style={{ color: colors.text, marginBottom: 40 }}>Select Portal</h2>
-      <div style={{ display: 'grid', gap: 15 }}>
-        <button onClick={() => setMode('ajo')} style={{ ...styles.card, background: 'none', borderColor: CONFIG.modes.ajo.primary, color: CONFIG.modes.ajo.primary, height: 120, fontSize: 20, fontWeight: '900', cursor: 'pointer' }}><Wallet size={32}/><br/>AJO PORTAL</button>
-        <button onClick={() => setMode('loans')} style={{ ...styles.card, background: 'none', borderColor: CONFIG.modes.loans.primary, color: CONFIG.modes.loans.primary, height: 120, fontSize: 20, fontWeight: '900', cursor: 'pointer' }}><HandCoins size={32}/><br/>LOAN PORTAL</button>
-      </div>
-      <button onClick={onLogout} style={{ marginTop: 40, background: 'none', border: 'none', color: colors.textSecondary, cursor: 'pointer' }}><LogOut size={18}/> Log Out</button>
-    </div>
-  </div>
-);
-
-const PrintView = ({ list, mode, onClose }) => (
-  <div className="print-area">
-    <div className="print-grid">
-      {list.map(m => (
-        <div key={m.id} className="print-card">
-          <h2>{CONFIG.business.name}</h2>
-          <div style={{fontSize: 10, marginBottom: 10}}>{mode.toUpperCase()} MEMBER</div>
-          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${m.registration_no}`} style={{ width: 130 }} alt="qr" />
-          <div style={{ textAlign: 'left', marginTop: 15, fontSize: 13 }}>
-            <strong>NAME:</strong> {m.full_name}<br/>
-            <strong>ID:</strong> {m.registration_no}
-          </div>
-        </div>
-      ))}
-    </div>
-    <div className="no-print" style={{position:'fixed', bottom: 20, right: 20, display:'flex', gap:10}}>
-      <button onClick={() => window.print()} style={{...styles.btnPrimary, background:'#10b981'}}>Print Now</button>
-      <button onClick={onClose} style={styles.btnSecondary}>Close</button>
-    </div>
-  </div>
-);
