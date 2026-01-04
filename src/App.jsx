@@ -122,22 +122,51 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
     members.filter(m => (m.full_name || '').toLowerCase().includes(search.toLowerCase()) || (m.registration_no || '').includes(search.toUpperCase()))
   , [members, search]);
 
+  const handleKeyboard = (e) => {
+    if (filtered.length === 0) return;
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = Math.min(focusedIdx + 1, filtered.length - 1);
+      if (e.shiftKey) {
+        const start = Math.min(anchorIdx.current ?? focusedIdx, next);
+        const end = Math.max(anchorIdx.current ?? focusedIdx, next);
+        setSelectedIds(filtered.slice(start, end + 1).map(m => m.id));
+      }
+      setFocusedIdx(next);
+    } 
+    else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = Math.max(focusedIdx - 1, 0);
+      if (e.shiftKey) {
+        const start = Math.min(anchorIdx.current ?? focusedIdx, next);
+        const end = Math.max(anchorIdx.current ?? focusedIdx, next);
+        setSelectedIds(filtered.slice(start, end + 1).map(m => m.id));
+      }
+      setFocusedIdx(next);
+    } 
+    else if (e.key === ' ') {
+      e.preventDefault();
+      const id = filtered[focusedIdx].id;
+      setSelectedIds(p => p.includes(id) ? p.filter(i => i !== id) : [...p, id]);
+      anchorIdx.current = focusedIdx;
+    }
+  };
+
   const getBalance = (m) => {
     const paid = transactions.filter(t => t.contributor_id === m.id).reduce((s, t) => s + (t.amount || 0), 0);
     return (m.total_to_repay || 0) - paid;
   };
 
   return (
-    <div>
+    <div onKeyDown={handleKeyboard} tabIndex={0} style={{outline:'none'}}>
       <SearchBar value={search} onChange={setSearch} placeholder="Search members..." colors={colors} />
       <div style={{ display: 'flex', gap: 10, marginBottom: 15 }}>
         {isAdmin && <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>+ New Member</button>}
-        {isAdmin && (
-          <div style={{display:'flex', gap:5}}>
-            <button onClick={() => setSelectedIds(filtered.map(m => m.id))} style={styles.smallGhostBtn}>All</button>
-            <button onClick={() => setSelectedIds([])} style={styles.smallGhostBtn}>Clear</button>
-          </div>
-        )}
+        <div style={{display:'flex', gap:5}}>
+          <button onClick={() => setSelectedIds(filtered.map(m => m.id))} style={styles.smallGhostBtn}>All</button>
+          <button onClick={() => setSelectedIds([])} style={styles.smallGhostBtn}>Clear</button>
+        </div>
       </div>
 
       {selectedIds.length > 0 && (
@@ -155,15 +184,19 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
       <div style={styles.list}>
         {filtered.map((m, idx) => {
           const isSelected = selectedIds.includes(m.id);
+          const isFocused = focusedIdx === idx;
           const balance = mode === 'loans' ? getBalance(m) : null;
-          // Generate QR URL once
           const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${m.registration_no}`;
           
           return (
-            <div key={m.id} onClick={() => setSelectedIds(p => p.includes(m.id) ? p.filter(i => i !== m.id) : [...p, m.id])} 
-              style={{ ...styles.listItem, background: colors.card, borderColor: isSelected ? colors.primary : colors.border }}>
+            <div key={m.id} 
+              onClick={() => { setSelectedIds(p => p.includes(m.id) ? p.filter(i => i !== m.id) : [...p, m.id]); setFocusedIdx(idx); anchorIdx.current = idx; }} 
+              style={{ 
+                ...styles.listItem, 
+                background: isFocused ? `${colors.primary}15` : colors.card, 
+                borderColor: isSelected ? colors.primary : isFocused ? colors.primary : colors.border 
+              }}>
               
-              {/* QR Preview (Ensures loading before print) */}
               <div style={{ width: 50, height: 50, background: '#fff', borderRadius: 8, overflow: 'hidden', marginRight: 12, border: '1px solid #ddd' }}>
                 <img src={qrUrl} alt="qr" style={{ width: '100%', height: '100%' }} />
               </div>
@@ -188,28 +221,19 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
   );
 };
 
-/* ===================== IMPROVED BULK PRINT CONFIG ===================== */
+/* ===================== BULK PRINT CONFIG ===================== */
 const BulkPrintConfig = ({ members, perPage, setPerPage, onClose, colors }) => {
   const [isPreparing, setIsPreparing] = useState(false);
 
   const handlePrint = () => {
     setIsPreparing(true);
     const images = document.querySelectorAll('.print-area img');
-    
     const promises = Array.from(images).map(img => {
       if (img.complete) return Promise.resolve();
-      return new Promise((resolve) => {
-        img.onload = resolve;
-        img.onerror = resolve;
-      });
+      return new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; });
     });
-
     Promise.all(promises).then(() => {
-      // Small timeout to allow the browser engine to paint the cached images
-      setTimeout(() => {
-        setIsPreparing(false);
-        window.print();
-      }, 500);
+      setTimeout(() => { setIsPreparing(false); window.print(); }, 500);
     });
   };
 
@@ -217,18 +241,13 @@ const BulkPrintConfig = ({ members, perPage, setPerPage, onClose, colors }) => {
     <div style={styles.overlay} className="no-print">
       <div style={{ ...styles.modalBox, background: colors.card, maxWidth: 400 }}>
         <h3>Print {members.length} Cards</h3>
-        <p style={{fontSize: 12, opacity: 0.7, marginBottom: 20}}>Layout selection for A4 paper</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
           {[1, 4, 8, 12].map(n => (
             <button key={n} onClick={() => setPerPage(n)} style={{ padding: 12, borderRadius: 10, border: '1px solid', background: perPage === n ? colors.primary : 'none', color: perPage === n ? '#fff' : colors.text, borderColor: colors.primary }}>{n} Per A4</button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button 
-            disabled={isPreparing}
-            onClick={handlePrint} 
-            style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}
-          >
+          <button disabled={isPreparing} onClick={handlePrint} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>
             {isPreparing ? 'Loading...' : 'Open Print Dialog'}
           </button>
           <button onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button>
@@ -249,15 +268,9 @@ const PrintEngine = ({ members, mode, perPage }) => {
           {pMembers.map(m => (
             <div key={m.id} className="print-card">
               <h4 style={{ margin: 0, fontSize: '12pt' }}>{CONFIG.business.name}</h4>
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${m.registration_no}`} 
-                style={{ width: '120px', height: '120px', margin: '3mm 0' }} 
-                crossOrigin="anonymous"
-                alt="qr" 
-              />
+              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${m.registration_no}`} style={{ width: '120px', height: '120px', margin: '3mm 0' }} crossOrigin="anonymous" alt="qr" />
               <div style={{ textAlign: 'left', width: '100%', fontSize: '10pt' }}>
-                <strong>ID:</strong> {m.registration_no}<br/>
-                <strong>NAME:</strong> {m.full_name}
+                <strong>ID:</strong> {m.registration_no}<br/><strong>NAME:</strong> {m.full_name}
               </div>
             </div>
           ))}
@@ -387,6 +400,52 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
   );
 };
 
+const AgentManagement = ({ agents, onRefresh, showToast, colors, confirmAction }) => {
+  const [form, setForm] = useState({ show: false, agent: null });
+  return (
+    <div>
+      <button onClick={() => setForm({ show: true, agent: null })} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15, width: '100%' }}><UserPlus size={16} /> New Agent</button>
+      {form.show && <AgentForm agent={form.agent} onClose={() => setForm({ show: false, agent: null })} onSuccess={() => { setForm({ show: false, agent: null }); onRefresh(); }} showToast={showToast} colors={colors} />}
+      <div style={styles.list}>
+        {agents.map(a => (
+          <div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
+            <div style={{ flex: 1 }}><strong>{a.full_name}</strong><br/><small style={styles.subtext}>ID: {a.employee_id_number}</small></div>
+            <div style={{display:'flex', gap:5}}>
+              <button onClick={() => setForm({ show: true, agent: a })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
+              <button onClick={() => confirmAction("Delete?", `Remove ${a.full_name}?`, async () => { await supabase.from('employees').delete().eq('id', a.id); onRefresh(); })} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const AgentForm = ({ agent, onClose, onSuccess, showToast, colors }) => {
+  const isEdit = !!agent;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = { full_name: fd.get('n'), employee_id_number: fd.get('id').toLowerCase(), password: fd.get('p') };
+    const { error } = isEdit ? await supabase.from('employees').update(payload).eq('id', agent.id) : await supabase.from('employees').insert([payload]);
+    if (error) showToast("Error saving", "error");
+    else { showToast("Saved", "success"); onSuccess(); }
+  };
+  return (
+    <div style={styles.overlay}>
+      <div style={{ ...styles.modalBox, background: colors.card, maxWidth: 350 }}>
+        <h3>{isEdit ? 'Edit' : 'New'} Agent</h3>
+        <form onSubmit={handleSubmit} style={{ textAlign: 'left', display: 'grid', gap: 10 }}>
+          <input name="n" defaultValue={agent?.full_name} placeholder="Name" style={styles.input} required />
+          <input name="id" defaultValue={agent?.employee_id_number} placeholder="Login ID" style={styles.input} required />
+          <input name="p" defaultValue={agent?.password} placeholder="Password" style={styles.input} required />
+          <div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>Save</button><button type="button" onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button></div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const LoginScreen = ({ onLogin, loading, colors }) => {
   const [type, setType] = useState('admin');
   return (
@@ -458,52 +517,6 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
           <button onClick={() => setScanning(false)} style={{ position:'absolute', top: 15, right: 15, background:'#ef4444', color:'#fff', borderRadius:'50%', padding:10, border:'none', zIndex:50 }}><X/></button>
         </div>
       )}
-    </div>
-  );
-};
-
-const AgentManagement = ({ agents, onRefresh, showToast, colors, confirmAction }) => {
-  const [form, setForm] = useState({ show: false, agent: null });
-  return (
-    <div>
-      <button onClick={() => setForm({ show: true, agent: null })} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15, width: '100%' }}><UserPlus size={16} /> New Agent</button>
-      {form.show && <AgentForm agent={form.agent} onClose={() => setForm({ show: false, agent: null })} onSuccess={() => { setForm({ show: false, agent: null }); onRefresh(); }} showToast={showToast} colors={colors} />}
-      <div style={styles.list}>
-        {agents.map(a => (
-          <div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-            <div style={{ flex: 1 }}><strong>{a.full_name}</strong><br/><small style={styles.subtext}>ID: {a.employee_id_number}</small></div>
-            <div style={{display:'flex', gap:5}}>
-              <button onClick={() => setForm({ show: true, agent: a })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
-              <button onClick={() => confirmAction("Delete?", `Remove ${a.full_name}?`, async () => { await supabase.from('employees').delete().eq('id', a.id); onRefresh(); })} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const AgentForm = ({ agent, onClose, onSuccess, showToast, colors }) => {
-  const isEdit = !!agent;
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const payload = { full_name: fd.get('n'), employee_id_number: fd.get('id').toLowerCase(), password: fd.get('p') };
-    const { error } = isEdit ? await supabase.from('employees').update(payload).eq('id', agent.id) : await supabase.from('employees').insert([payload]);
-    if (error) showToast("Error saving", "error");
-    else { showToast("Saved", "success"); onSuccess(); }
-  };
-  return (
-    <div style={styles.overlay}>
-      <div style={{ ...styles.modalBox, background: colors.card, maxWidth: 350 }}>
-        <h3>{isEdit ? 'Edit' : 'New'} Agent</h3>
-        <form onSubmit={handleSubmit} style={{ textAlign: 'left', display: 'grid', gap: 10 }}>
-          <input name="n" defaultValue={agent?.full_name} placeholder="Name" style={styles.input} required />
-          <input name="id" defaultValue={agent?.employee_id_number} placeholder="Login ID" style={styles.input} required />
-          <input name="p" defaultValue={agent?.password} placeholder="Password" style={styles.input} required />
-          <div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>Save</button><button type="button" onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button></div>
-        </form>
-      </div>
     </div>
   );
 };
