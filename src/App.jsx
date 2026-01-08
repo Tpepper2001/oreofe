@@ -5,7 +5,7 @@ import {
   Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
   Printer, AlertCircle, Moon, Sun, UserCheck, Search,
   TrendingUp, Calendar, Trash2, Edit3, Download, ArrowLeftRight, 
-  Wallet, HandCoins, CheckSquare, Square
+  Wallet, HandCoins, CheckSquare, Square, BarChart3
 } from 'lucide-react';
 
 /* ===================== 1. CONFIGURATION ===================== */
@@ -304,7 +304,9 @@ const styles = {
   smallGhostBtn: { background: 'none', border: '1px solid #334155', color: 'inherit', borderRadius: 8, padding: '5px 10px', fontSize: 10, cursor: 'pointer' },
   statCard: { padding: 12, borderRadius: 12, border: '1px solid', textAlign: 'center' },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 },
-  fadeIn: { animation: 'fadeIn 0.4s ease' }
+  fadeIn: { animation: 'fadeIn 0.4s ease' },
+  toastContainer: { position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10 },
+  toast: { padding: '12px 24px', borderRadius: 12, color: '#fff', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }
 };
 
 if (typeof document !== 'undefined') {
@@ -312,6 +314,8 @@ if (typeof document !== 'undefined') {
   s.textContent = `
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .print-area { display: none; }
+    .skeleton { background: #1e293b; animation: pulse 1.5s infinite ease-in-out; }
+    @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 0.8; } 100% { opacity: 0.5; } }
     @media print {
       @page { size: A4; margin: 0; }
       .no-print { display: none !important; }
@@ -330,6 +334,18 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
     const today = new Date().toISOString().slice(0, 10);
     return { todayRev: data.transactions.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0), totalRev: data.transactions.reduce((s, t) => s + (t.amount || 0), 0) };
   }, [data.transactions]);
+
+  const dailyStats = useMemo(() => {
+    const groups = {};
+    data.transactions.forEach(t => {
+      const date = t.created_at.split('T')[0];
+      groups[date] = (groups[date] || 0) + (t.amount || 0);
+    });
+    return Object.entries(groups)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .slice(0, 7); // Last 7 days
+  }, [data.transactions]);
+
   if (view === 'dashboard') return (
     <div style={styles.fadeIn}>
       <div style={styles.statsGrid}>
@@ -337,6 +353,21 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
         <StatCard title="People" value={data.members.length} colors={colors} />
         <StatCard title="Total" value={`₦${stats.totalRev.toLocaleString()}`} colors={colors} />
       </div>
+
+      <SectionHeader title="Daily Collections" icon={<BarChart3 size={20} />} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+        {dailyStats.map(([date, amount]) => (
+          <div key={date} style={{ ...styles.listItem, padding: '12px 18px', marginBottom: 0, background: colors.card, borderColor: colors.border }}>
+            <div style={{ flex: 1 }}>
+               <div style={{fontSize: 14, fontWeight: 'bold'}}>{new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+               <div style={styles.subtext}>{date}</div>
+            </div>
+            <strong style={{ color: colors.primary, fontSize: 16 }}>₦{amount.toLocaleString()}</strong>
+          </div>
+        ))}
+        {dailyStats.length === 0 && <div style={{textAlign: 'center', padding: 20, opacity: 0.5}}>No collection data found</div>}
+      </div>
+
       <SectionHeader title="Recent Activity" icon={<TrendingUp size={20} />} />
       <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} />
     </div>
@@ -493,11 +524,12 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
     <div style={{ ...styles.modalBox, background: colors.card, margin: '0 auto', maxWidth: 350 }}>
       <small style={{color: colors.primary, fontWeight:'bold'}}>{member.registration_no}</small>
       <h2 style={{margin: '10px 0'}}>{member.full_name}</h2>
-      <input type="number" value={amt} onChange={e => setAmt(e.target.value)} style={{...styles.bigInput, color: colors.text, borderBottomColor: colors.primary}} autoFocus />
+      <input type="number" value={amt} onChange={e => setAmt(e.target.value)} style={{ width: '100%', fontSize: 32, fontWeight: 'bold', textAlign: 'center', background: 'none', border: 'none', borderBottom: `2px solid ${colors.primary}`, color: colors.text, marginBottom: 20, outline: 'none' }} autoFocus />
       <button onClick={async () => {
         const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([{ 
           contributor_id: member.id, full_name: member.full_name, registration_no: member.registration_no,
-          amount: Number(amt), employee_name: profile?.name || 'Agent', expected_amount: member.expected_amount
+          amount: Number(amt), employee_name: profile?.name || 'Admin', expected_amount: member.expected_amount,
+          employee_id: profile?.id
         }]);
         if (!error) { showToast("Saved!", "success"); setMember(null); onRefresh(); }
       }} style={{ ...styles.btnPrimary, background: colors.primary, width: '100%' }}>Confirm Payment</button>
@@ -508,13 +540,13 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
   return (
     <div style={{ textAlign: 'center', padding: 20 }}>
       {!scanning ? (
-        <button onClick={() => setScanning(true)} style={{...styles.scanBtn, borderColor: colors.primary, color: colors.primary}}>
+        <button onClick={() => setScanning(true)} style={{ width: '100%', height: 200, borderRadius: 24, border: `2px dashed ${colors.primary}`, background: 'none', cursor: 'pointer', color: colors.primary, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
           <Camera size={48}/><br/>Start Scanning
         </button>
       ) : (
         <div style={{ position: 'relative', height: '380px', borderRadius: 24, overflow: 'hidden', border: `3px solid ${colors.primary}` }}>
           <Scanner onScan={handleScanResult} allowMultiple={false} />
-          <button onClick={() => setScanning(false)} style={{ position:'absolute', top: 15, right: 15, background:'#ef4444', color:'#fff', borderRadius:'50%', padding:10, border:'none', zIndex:50 }}><X/></button>
+          <button onClick={() => setScanning(false)} style={{ position:'absolute', top: 15, right: 15, background:'#ef4444', color:'#fff', borderRadius:'50%', padding:10, border:'none', zIndex: 50 }}><X/></button>
         </div>
       )}
     </div>
