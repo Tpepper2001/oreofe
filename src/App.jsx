@@ -224,7 +224,6 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
   const [selectedDay, setSelectedDay] = useState(null);
   const [syncing, setSyncing] = useState(false);
 
-  // GLOBAL SYNC LOGIC
   const handleGlobalSync = async () => {
     setSyncing(true);
     try {
@@ -239,9 +238,9 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
           .eq('contributor_id', m.id)
       );
       await Promise.all(updates);
-      showToast("All Transaction Data Synced", "success");
+      showToast("Data Sync Complete", "success");
       onRefresh();
-    } catch (err) { showToast("Sync Error", "error"); }
+    } catch (err) { showToast("Sync Failed", "error"); }
     finally { setSyncing(false); }
   };
 
@@ -280,7 +279,6 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
             <StatCard title="Total" value={`₦${stats.totalRev.toLocaleString()}`} colors={colors} />
           </div>
 
-          {/* GLOBAL SYNC BUTTON */}
           <div style={{marginBottom: 20}}>
             <button onClick={handleGlobalSync} disabled={syncing} style={{...styles.btnSecondary, width: '100%', background: colors.card, border: `1px solid ${colors.border}`, display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center', color: colors.text}}>
               <RefreshCw size={16} className={syncing ? "spin" : ""}/> {syncing ? "Syncing..." : "Fix Member Data Sync"}
@@ -312,7 +310,31 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
   return null;
 };
 
-/* ===================== SCANNER WITH BACKDATING ===================== */
+/* ===================== AGENT PORTAL ===================== */
+
+const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, mode }) => {
+  const stats = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const myTs = data.transactions.filter(t => t.employee_id === profile?.id);
+    return { todayTotal: myTs.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0), count: myTs.filter(t => t.created_at.startsWith(today)).length };
+  }, [data.transactions, profile?.id]);
+  if (view === 'dashboard') return (
+    <div style={styles.fadeIn}>
+      <div style={{padding: 30, borderRadius: 24, background: colors.primary, color: '#fff', marginBottom: 20}}>
+        <small>COLLECTED TODAY</small>
+        <h1 style={{fontSize: 32}}>₦{stats.todayTotal.toLocaleString()}</h1>
+        <span>{stats.count} Operations</span>
+      </div>
+      <SectionHeader title="Recent Activity" icon={<Calendar size={20} />} />
+      <TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} />
+    </div>
+  );
+  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={false} mode={mode} setBulkPrintList={()=>{}} />;
+  if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} mode={mode} />;
+  return null;
+};
+
+/* ===================== SCANNER & PAYMENT (FIXED) ===================== */
 
 const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
   const [scanning, setScanning] = useState(false);
@@ -320,6 +342,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
   const [amt, setAmt] = useState('');
   const [days, setDays] = useState(1);
   const [backDate, setBackDate] = useState(new Date().toISOString().slice(0, 10));
+  const [saving, setSaving] = useState(false);
 
   const handleScanResult = useCallback(async (res) => {
     if (!res || res.length === 0) return;
@@ -333,20 +356,57 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
         const { data: m2 } = await supabase.from(table).select('*').eq('id', lookup).maybeSingle();
         m = m2;
       }
-      if (m) { setMember(m); setAmt(m.expected_amount || ''); setDays(1); setScanning(false); }
+      if (m) { 
+        setMember(m); 
+        setAmt(String(m.expected_amount || '')); 
+        setDays(1);
+        setScanning(false); 
+      }
       else showToast("Member Not Found", "error");
     } catch (e) { showToast("Invalid Card", "error"); }
   }, [mode, showToast]);
+
+  const handlePayment = async () => {
+    if (!amt || Number(amt) <= 0) return showToast("Enter valid amount", "error");
+    setSaving(true);
+    try {
+      const finalAmt = Number(amt) * Number(days);
+      const payload = { 
+        contributor_id: member.id, 
+        full_name: member.full_name, 
+        registration_no: member.registration_no,
+        amount: finalAmt, 
+        employee_name: profile?.name || 'Admin', 
+        employee_id: profile?.id || null
+      };
+
+      // Apply backdating if admin changed the date
+      if (!profile && backDate !== new Date().toISOString().slice(0, 10)) {
+        payload.created_at = backDate + 'T' + new Date().toISOString().split('T')[1];
+      }
+
+      const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([payload]);
+      
+      if (error) throw error;
+
+      showToast("Payment Recorded!", "success");
+      setMember(null);
+      onRefresh();
+    } catch (err) {
+      showToast("Save Failed", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (member) return (
     <div style={{ ...styles.modalBox, background: colors.card, margin: '0 auto', maxWidth: 350 }}>
       <small style={{color: colors.primary, fontWeight:'bold'}}>{member.registration_no}</small>
       <h2 style={{margin: '5px 0 20px'}}>{member.full_name}</h2>
       
-      {/* ADMIN BACKDATING FIELD */}
       {!profile && (
         <div style={{marginBottom: 15, textAlign: 'left'}}>
-          <small style={styles.subtext}>Transaction Date (Backdating)</small>
+          <small style={styles.subtext}>Transaction Date (Admin)</small>
           <input type="date" value={backDate} onChange={e => setBackDate(e.target.value)} style={{...styles.input, marginTop: 5}} />
         </div>
       )}
@@ -368,20 +428,9 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
         <div style={{fontSize: 28, fontWeight: '900', color: colors.primary}}>₦{(Number(amt) * days).toLocaleString()}</div>
       </div>
 
-      <button onClick={async () => {
-        const finalAmt = Number(amt) * days;
-        const payload = { 
-          contributor_id: member.id, full_name: member.full_name, registration_no: member.registration_no,
-          amount: finalAmt, employee_name: profile?.name || 'Admin', expected_amount: member.expected_amount,
-          employee_id: profile?.id
-        };
-        // Backdating logic
-        if (!profile && backDate !== new Date().toISOString().slice(0, 10)) {
-           payload.created_at = backDate + 'T' + new Date().toISOString().split('T')[1];
-        }
-        const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([payload]);
-        if (!error) { showToast("Saved!", "success"); setMember(null); onRefresh(); }
-      }} style={{ ...styles.btnPrimary, background: colors.primary, width: '100%' }}>Confirm Payment</button>
+      <button disabled={saving} onClick={handlePayment} style={{ ...styles.btnPrimary, background: colors.primary, width: '100%' }}>
+        {saving ? 'Saving...' : 'Confirm Payment'}
+      </button>
       <button onClick={() => setMember(null)} style={{ ...styles.btnSecondary, width: '100%', marginTop: 10 }}>Cancel</button>
     </div>
   );
@@ -402,7 +451,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
   );
 };
 
-/* ===================== MEMBER FORM WITH SYNC ===================== */
+/* ===================== MEMBER FORM ===================== */
 
 const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => {
   const isEdit = !!member;
@@ -417,13 +466,12 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
     if (error) {
       showToast("Error saving", "error");
     } else {
-      // SYNC PREVIOUS TRANSACTIONS
       if (isEdit) {
+        // Automatically sync previous transactions to match new name/serial
         await supabase.from(CONFIG.modes[mode].transTable)
           .update({ 
             full_name: payload.full_name, 
-            registration_no: payload.registration_no,
-            expected_amount: payload.expected_amount 
+            registration_no: payload.registration_no
           })
           .eq('contributor_id', member.id);
       }
@@ -450,29 +498,7 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
   );
 };
 
-/* ===================== REMAINDER OF COMPONENTS (NO CHANGES) ===================== */
-
-const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, mode }) => {
-  const stats = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const myTs = data.transactions.filter(t => t.employee_id === profile?.id);
-    return { todayTotal: myTs.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0), count: myTs.filter(t => t.created_at.startsWith(today)).length };
-  }, [data.transactions, profile?.id]);
-  if (view === 'dashboard') return (
-    <div style={styles.fadeIn}>
-      <div style={{padding: 30, borderRadius: 24, background: colors.primary, color: '#fff', marginBottom: 20}}>
-        <small>COLLECTED TODAY</small>
-        <h1 style={{fontSize: 32}}>₦{stats.todayTotal.toLocaleString()}</h1>
-        <span>{stats.count} Operations</span>
-      </div>
-      <SectionHeader title="Recent Activity" icon={<Calendar size={20} />} />
-      <TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} />
-    </div>
-  );
-  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={false} mode={mode} setBulkPrintList={()=>{}} />;
-  if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} mode={mode} />;
-  return null;
-};
+/* ===================== HELPER UI COMPONENTS (NO CHANGES) ===================== */
 
 const AgentManagement = ({ agents, onRefresh, showToast, colors, confirmAction }) => {
   const [form, setForm] = useState({ show: false, agent: null });
