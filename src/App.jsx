@@ -123,6 +123,10 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
   , [members, search]);
 
   const handleKeyboard = (e) => {
+    // === FIX START: Ignore custom shortcuts if typing in an Input or Textarea ===
+    if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+    // === FIX END ===
+
     if (filtered.length === 0) return;
     
     if (e.key === 'ArrowDown') {
