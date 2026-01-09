@@ -119,32 +119,52 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
     setSyncing(true);
     try {
       const { data: members } = await supabase.from(CONFIG.modes[mode].membersTable).select('*');
-      const updates = members.map(m => 
-        supabase.from(CONFIG.modes[mode].transTable)
-          .update({ 
-            full_name: m.full_name, 
-            registration_no: m.registration_no,
-            expected_amount: m.expected_amount // SYNCING NEW AMOUNTS
-          })
-          .eq('contributor_id', m.id)
-      );
-      await Promise.all(updates);
-      showToast("Global Sync Complete (Names & Amounts)", "success");
+      
+      // We process each member's transactions
+      for (const m of members) {
+        // Find transactions for this member that are empty or have amount 0
+        const { data: badTrans } = await supabase.from(CONFIG.modes[mode].transTable)
+          .select('id, amount')
+          .eq('contributor_id', m.id);
+
+        if (badTrans && badTrans.length > 0) {
+          const updates = badTrans.map(t => {
+            const finalAmount = (t.amount && t.amount > 0) ? t.amount : m.expected_amount;
+            return supabase.from(CONFIG.modes[mode].transTable)
+              .update({ 
+                full_name: m.full_name, 
+                registration_no: m.registration_no,
+                expected_amount: m.expected_amount,
+                amount: finalAmount // FIXING THE "0" OR NULL AMOUNTS
+              })
+              .eq('id', t.id);
+          });
+          await Promise.all(updates);
+        }
+      }
+      
+      showToast("History Fixed & Synced", "success");
       onRefresh();
-    } catch (err) { showToast("Sync Error", "error"); }
-    finally { setSyncing(false); }
+    } catch (err) { 
+      showToast("Sync Failed", "error"); 
+    } finally { 
+      setSyncing(false); 
+    }
   };
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
-    return { todayRev: data.transactions.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0), totalRev: data.transactions.reduce((s, t) => s + (t.amount || 0), 0) };
+    return { 
+      todayRev: data.transactions.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (Number(t.amount) || 0), 0), 
+      totalRev: data.transactions.reduce((s, t) => s + (Number(t.amount) || 0), 0) 
+    };
   }, [data.transactions]);
 
   const dailyStats = useMemo(() => {
     const groups = {};
     data.transactions.forEach(t => {
       const date = t.created_at.split('T')[0];
-      groups[date] = (groups[date] || 0) + (t.amount || 0);
+      groups[date] = (groups[date] || 0) + (Number(t.amount) || 0);
     });
     return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 7); 
   }, [data.transactions]);
@@ -172,7 +192,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
 
           <div style={{marginBottom: 20}}>
             <button onClick={handleGlobalSync} disabled={syncing} style={{...styles.btnSecondary, width: '100%', background: colors.card, border: `1px solid ${colors.border}`, display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center', color: colors.text}}>
-              <RefreshCw size={16} className={syncing ? "spin" : ""}/> {syncing ? "Syncing History..." : "Global Sync (Fix History)"}
+              <RefreshCw size={16} className={syncing ? "spin" : ""}/> {syncing ? "Repairing Amounts..." : "Global Sync (Fix History & Amounts)"}
             </button>
           </div>
 
@@ -223,16 +243,23 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
         const { data: m2 } = await supabase.from(table).select('*').eq('id', lookup).maybeSingle();
         m = m2;
       }
-      if (m) { setMember(m); setAmt(String(m.expected_amount || '')); setDays(1); setScanning(false); }
+      if (m) { 
+        setMember(m); 
+        setAmt(String(m.expected_amount || '')); 
+        setDays(1);
+        setScanning(false); 
+      }
       else showToast("Member Not Found", "error");
     } catch (e) { showToast("Invalid Card", "error"); }
   }, [mode, showToast]);
 
   const handlePayment = async () => {
-    if (!amt || Number(amt) <= 0) return showToast("Enter valid amount", "error");
+    const inputAmt = Number(amt) || member.expected_amount || 0;
+    if (inputAmt <= 0) return showToast("Enter valid amount", "error");
+    
     setSaving(true);
     try {
-      const finalAmt = Number(amt) * Number(days);
+      const finalAmt = inputAmt * Number(days);
       const payload = { 
         contributor_id: member.id, 
         full_name: member.full_name, 
@@ -275,7 +302,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
       </div>
       <div style={{marginBottom: 20, padding: 15, borderRadius: 12, background: `${colors.primary}10`}}>
         <small style={styles.subtext}>TOTAL TO PAY</small>
-        <div style={{fontSize: 28, fontWeight: '900', color: colors.primary}}>₦{(Number(amt) * days).toLocaleString()}</div>
+        <div style={{fontSize: 28, fontWeight: '900', color: colors.primary}}>₦{( (Number(amt) || member.expected_amount) * days).toLocaleString()}</div>
       </div>
       <button disabled={saving} onClick={handlePayment} style={{ ...styles.btnPrimary, background: colors.primary, width: '100%' }}>{saving ? 'Saving...' : 'Confirm Payment'}</button>
       <button onClick={() => setMember(null)} style={{ ...styles.btnSecondary, width: '100%', marginTop: 10 }}>Cancel</button>
@@ -307,15 +334,27 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
     const fd = new FormData(e.target);
     const payload = { full_name: fd.get('n'), registration_no: fd.get('r'), phone_number: fd.get('p') || '', address: fd.get('a') || '', expected_amount: Number(fd.get('am')), ajo_owner_id: 'admin' };
     if (mode === 'loans') { payload.total_loan_amount = Number(fd.get('tla') || 0); payload.total_to_repay = Number(fd.get('ttr') || 0); }
+    
     const { error } = isEdit ? await supabase.from(CONFIG.modes[mode].membersTable).update(payload).eq('id', member.id) : await supabase.from(CONFIG.modes[mode].membersTable).insert([payload]);
-    if (error) { showToast("Error saving", "error"); } else {
+    
+    if (error) { 
+      showToast("Error saving", "error"); 
+    } else {
       if (isEdit) {
-        // AUTOMATICALLY SYNC EVERYTHING INCLUDING NEW AMOUNT
-        await supabase.from(CONFIG.modes[mode].transTable)
-          .update({ full_name: payload.full_name, registration_no: payload.registration_no, expected_amount: payload.expected_amount })
-          .eq('contributor_id', member.id);
+        // Find existing transactions that might be missing amount info or need updates
+        const { data: trans } = await supabase.from(CONFIG.modes[mode].transTable).select('id, amount').eq('contributor_id', member.id);
+        if (trans) {
+          const updates = trans.map(t => supabase.from(CONFIG.modes[mode].transTable).update({ 
+            full_name: payload.full_name, 
+            registration_no: payload.registration_no,
+            expected_amount: payload.expected_amount,
+            amount: (t.amount && t.amount > 0) ? t.amount : payload.expected_amount
+          }).eq('id', t.id));
+          await Promise.all(updates);
+        }
       }
-      showToast("Saved & History Updated", "success"); onSuccess(); 
+      showToast("Saved & History Repaired", "success"); 
+      onSuccess(); 
     }
   };
   return (
@@ -338,7 +377,7 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
   );
 };
 
-/* ===================== REMAINDER OF UI (UNCHANGED) ===================== */
+/* ===================== SHARED UI (UNCHANGED) ===================== */
 
 const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, setModal, setBulkPrintList }) => {
   const [search, setSearch] = useState('');
@@ -370,7 +409,7 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
 };
 
 const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, mode }) => {
-  const stats = useMemo(() => { const today = new Date().toISOString().slice(0, 10); const myTs = data.transactions.filter(t => t.employee_id === profile?.id); return { todayTotal: myTs.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0), count: myTs.filter(t => t.created_at.startsWith(today)).length }; }, [data.transactions, profile?.id]);
+  const stats = useMemo(() => { const today = new Date().toISOString().slice(0, 10); const myTs = data.transactions.filter(t => t.employee_id === profile?.id); return { todayTotal: myTs.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (Number(t.amount) || 0), 0), count: myTs.filter(t => t.created_at.startsWith(today)).length }; }, [data.transactions, profile?.id]);
   if (view === 'dashboard') return (<div style={styles.fadeIn}><div style={{padding: 30, borderRadius: 24, background: colors.primary, color: '#fff', marginBottom: 20}}><small>COLLECTED TODAY</small><h1 style={{fontSize: 32}}>₦{stats.todayTotal.toLocaleString()}</h1><span>{stats.count} Operations</span></div><SectionHeader title="Recent Activity" icon={<Calendar size={20} />} /><TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} /></div>);
   if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={false} mode={mode} setBulkPrintList={()=>{}} />;
   if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} mode={mode} />;
@@ -397,7 +436,7 @@ const ModeSelection = ({ setMode, colors, onLogout }) => (<div style={{ backgrou
 const Header = ({ business, isDark, onToggleTheme, onSwitchMode, colors }) => (<header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}><div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><button onClick={onSwitchMode} style={{ background: 'none', border: 'none', color: colors.text, cursor:'pointer' }}><ArrowLeftRight size={20}/></button><h1 style={{fontSize: 15, fontWeight: '900'}}>{business}</h1></div><button onClick={onToggleTheme} style={{background: 'none', border: 'none', cursor:'pointer'}}>{isDark ? <Sun color="#fff"/> : <Moon color="#000"/>}</button></header>);
 const Navigation = ({ view, role, onNavigate, onLogout, colors }) => (<nav style={{ ...styles.nav, background: colors.card, borderTop: `1px solid ${colors.border}` }}><NavBtn active={view === 'dashboard'} icon={<LayoutDashboard/>} label="Home" onClick={() => onNavigate('dashboard')} colors={colors} /><NavBtn active={view === 'members'} icon={<Users/>} label="Members" onClick={() => onNavigate('members')} colors={colors} />{role === 'admin' ? <NavBtn active={view === 'agents'} icon={<UserCheck/>} label="Agents" onClick={() => onNavigate('agents')} colors={colors} /> : <NavBtn active={view === 'scan'} icon={<Camera/>} label="Scan" onClick={() => onNavigate('scan')} colors={colors} />}<NavBtn icon={<LogOut/>} label="Exit" onClick={onLogout} colors={colors} /></nav>);
 const NavBtn = ({ active, icon, label, onClick, colors }) => (<button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? colors.primary : colors.textSecondary }}>{icon}<span style={{ fontSize: 10 }}>{label}</span></button>);
-const TransactionList = ({ transactions, colors, showTime = false, showCollector = true }) => (<div style={{display: 'flex', flexDirection: 'column', gap: 10}}>{transactions.map(t => (<div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}><div style={{ flex: 1 }}><strong style={{fontSize: 14}}>{t.full_name}</strong><div style={{display: 'flex', gap: 10, marginTop: 4}}>{showCollector && <small style={styles.subtext}>{t.employee_name || 'Admin'}</small>}{showTime && (<small style={{...styles.subtext, display:'flex', alignItems:'center', gap:3}}><Clock size={10}/> {new Date(t.created_at).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}</small>)}</div></div><strong style={{ color: colors.primary }}>₦{t.amount?.toLocaleString()}</strong></div>))}</div>);
+const TransactionList = ({ transactions, colors, showTime = false, showCollector = true }) => (<div style={{display: 'flex', flexDirection: 'column', gap: 10}}>{transactions.map(t => (<div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}><div style={{ flex: 1 }}><strong style={{fontSize: 14}}>{t.full_name}</strong><div style={{display: 'flex', gap: 10, marginTop: 4}}>{showCollector && <small style={styles.subtext}>{t.employee_name || 'Admin'}</small>}{showTime && (<small style={{...styles.subtext, display:'flex', alignItems:'center', gap:3}}><Clock size={10}/> {new Date(t.created_at).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}</small>)}</div></div><strong style={{ color: colors.primary }}>₦{(Number(t.amount) || 0).toLocaleString()}</strong></div>))}</div>);
 const StatCard = ({ title, value, colors }) => (<div style={{ ...styles.statCard, background: colors.card, borderColor: colors.border }}><small style={{ opacity: 0.6, fontSize: 10 }}>{title}</small><div style={{ fontSize: 14, fontWeight: 'bold' }}>{value}</div></div>);
 const SearchBar = ({ value, onChange, placeholder, colors }) => (<div style={{ ...styles.searchBar, background: colors.card, borderColor: colors.border }}><Search size={18} opacity={0.5} /><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ background: 'none', border: 'none', color: colors.text, width: '100%', outline: 'none' }} /></div>);
 const SectionHeader = ({ title, icon }) => (<div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '20px 0 10px' }}>{icon} <strong style={{fontSize: 15}}>{title}</strong></div>);
