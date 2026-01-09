@@ -109,116 +109,7 @@ export default function App() {
   );
 }
 
-/* ===================== 3. UI COMPONENTS ===================== */
-
-const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, setModal, setBulkPrintList }) => {
-  const [search, setSearch] = useState('');
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [focusedIdx, setFocusedIdx] = useState(0);
-  const [form, setForm] = useState({ show: false, member: null });
-  const anchorIdx = useRef(null);
-
-  const filtered = useMemo(() => 
-    members.filter(m => (m.full_name || '').toLowerCase().includes(search.toLowerCase()) || (m.registration_no || '').includes(search.toUpperCase()))
-  , [members, search]);
-
-  const handleKeyboard = (e) => {
-    if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-    if (filtered.length === 0) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      const next = Math.min(focusedIdx + 1, filtered.length - 1);
-      if (e.shiftKey) {
-        const start = Math.min(anchorIdx.current ?? focusedIdx, next);
-        const end = Math.max(anchorIdx.current ?? focusedIdx, next);
-        setSelectedIds(filtered.slice(start, end + 1).map(m => m.id));
-      }
-      setFocusedIdx(next);
-    } 
-    else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      const next = Math.max(focusedIdx - 1, 0);
-      if (e.shiftKey) {
-        const start = Math.min(anchorIdx.current ?? focusedIdx, next);
-        const end = Math.max(anchorIdx.current ?? focusedIdx, next);
-        setSelectedIds(filtered.slice(start, end + 1).map(m => m.id));
-      }
-      setFocusedIdx(next);
-    } 
-    else if (e.key === ' ') {
-      e.preventDefault();
-      const id = filtered[focusedIdx].id;
-      setSelectedIds(p => p.includes(id) ? p.filter(i => i !== id) : [...p, id]);
-      anchorIdx.current = focusedIdx;
-    }
-  };
-
-  const getBalance = (m) => {
-    const paid = transactions.filter(t => t.contributor_id === m.id).reduce((s, t) => s + (t.amount || 0), 0);
-    return (m.total_to_repay || 0) - paid;
-  };
-
-  return (
-    <div onKeyDown={handleKeyboard} tabIndex={0} style={{outline:'none'}}>
-      <SearchBar value={search} onChange={setSearch} placeholder="Search members..." colors={colors} />
-      <div style={{ display: 'flex', gap: 10, marginBottom: 15 }}>
-        {isAdmin && <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>+ New Member</button>}
-        <div style={{display:'flex', gap:5}}>
-          <button onClick={() => setSelectedIds(filtered.map(m => m.id))} style={styles.smallGhostBtn}>All</button>
-          <button onClick={() => setSelectedIds([])} style={styles.smallGhostBtn}>Clear</button>
-        </div>
-      </div>
-
-      {selectedIds.length > 0 && (
-        <div style={{...styles.floatingBar, background: colors.card, borderColor: colors.primary}}>
-          <span>{selectedIds.length} Selected</span>
-          <div style={{display:'flex', gap: 8}}>
-            <button onClick={() => setBulkPrintList(members.filter(m => selectedIds.includes(m.id)))} style={{...styles.btnPrimary, padding: '8px 16px', fontSize: 12, background: '#10b981'}}>Print Cards</button>
-            <button onClick={() => setSelectedIds([])} style={{...styles.btnSecondary, padding: '8px 16px', fontSize: 12}}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {form.show && <MemberForm member={form.member} mode={mode} onClose={() => setForm({ show: false, member: null })} onSuccess={() => { setForm({ show: false, member: null }); onRefresh(); }} showToast={showToast} colors={colors} />}
-
-      <div style={styles.list}>
-        {filtered.map((m, idx) => {
-          const isSelected = selectedIds.includes(m.id);
-          const isFocused = focusedIdx === idx;
-          const balance = mode === 'loans' ? getBalance(m) : null;
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${m.registration_no}`;
-          
-          return (
-            <div key={m.id} 
-              onClick={() => { setSelectedIds(p => p.includes(m.id) ? p.filter(i => i !== m.id) : [...p, m.id]); setFocusedIdx(idx); anchorIdx.current = idx; }} 
-              style={{ 
-                ...styles.listItem, 
-                background: isFocused ? `${colors.primary}15` : colors.card, 
-                borderColor: isSelected ? colors.primary : isFocused ? colors.primary : colors.border 
-              }}>
-              <div style={{ width: 50, height: 50, background: '#fff', borderRadius: 8, overflow: 'hidden', marginRight: 12, border: '1px solid #ddd' }}>
-                <img src={qrUrl} alt="qr" style={{ width: '100%', height: '100%' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <strong style={{ fontSize: 14 }}>{m.full_name}</strong>
-                <div style={styles.subtext}>{m.registration_no}</div>
-                {mode === 'loans' && <div style={{ fontSize: 10, fontWeight:'bold', color: balance > 0 ? '#ef4444' : '#10b981' }}>Bal: ₦{balance.toLocaleString()}</div>}
-              </div>
-              {isAdmin && (
-                <div style={{display:'flex', gap: 5}}>
-                  <button onClick={(e) => { e.stopPropagation(); setForm({ show: true, member: m }); }} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); setModal({show:true, title:"Delete?", msg:`Delete ${m.full_name}?`, onConfirm:async ()=>{await supabase.from(CONFIG.modes[mode].membersTable).delete().eq('id', m.id); onRefresh();}}); }} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-/* ===================== ADMIN DASHBOARD LOGIC ===================== */
+/* ===================== ADMIN DASHBOARD ===================== */
 
 const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPrintList, setModal }) => {
   const [selectedDay, setSelectedDay] = useState(null);
@@ -233,14 +124,14 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
           .update({ 
             full_name: m.full_name, 
             registration_no: m.registration_no,
-            expected_amount: m.expected_amount 
+            expected_amount: m.expected_amount // SYNCING NEW AMOUNTS
           })
           .eq('contributor_id', m.id)
       );
       await Promise.all(updates);
-      showToast("Data Sync Complete", "success");
+      showToast("Global Sync Complete (Names & Amounts)", "success");
       onRefresh();
-    } catch (err) { showToast("Sync Failed", "error"); }
+    } catch (err) { showToast("Sync Error", "error"); }
     finally { setSyncing(false); }
   };
 
@@ -281,7 +172,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
 
           <div style={{marginBottom: 20}}>
             <button onClick={handleGlobalSync} disabled={syncing} style={{...styles.btnSecondary, width: '100%', background: colors.card, border: `1px solid ${colors.border}`, display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center', color: colors.text}}>
-              <RefreshCw size={16} className={syncing ? "spin" : ""}/> {syncing ? "Syncing..." : "Fix Member Data Sync"}
+              <RefreshCw size={16} className={syncing ? "spin" : ""}/> {syncing ? "Syncing History..." : "Global Sync (Fix History)"}
             </button>
           </div>
 
@@ -310,31 +201,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
   return null;
 };
 
-/* ===================== AGENT PORTAL ===================== */
-
-const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, mode }) => {
-  const stats = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const myTs = data.transactions.filter(t => t.employee_id === profile?.id);
-    return { todayTotal: myTs.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0), count: myTs.filter(t => t.created_at.startsWith(today)).length };
-  }, [data.transactions, profile?.id]);
-  if (view === 'dashboard') return (
-    <div style={styles.fadeIn}>
-      <div style={{padding: 30, borderRadius: 24, background: colors.primary, color: '#fff', marginBottom: 20}}>
-        <small>COLLECTED TODAY</small>
-        <h1 style={{fontSize: 32}}>₦{stats.todayTotal.toLocaleString()}</h1>
-        <span>{stats.count} Operations</span>
-      </div>
-      <SectionHeader title="Recent Activity" icon={<Calendar size={20} />} />
-      <TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} />
-    </div>
-  );
-  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={false} mode={mode} setBulkPrintList={()=>{}} />;
-  if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} mode={mode} />;
-  return null;
-};
-
-/* ===================== SCANNER & PAYMENT (FIXED) ===================== */
+/* ===================== SCANNER & PAYMENT ===================== */
 
 const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
   const [scanning, setScanning] = useState(false);
@@ -356,12 +223,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
         const { data: m2 } = await supabase.from(table).select('*').eq('id', lookup).maybeSingle();
         m = m2;
       }
-      if (m) { 
-        setMember(m); 
-        setAmt(String(m.expected_amount || '')); 
-        setDays(1);
-        setScanning(false); 
-      }
+      if (m) { setMember(m); setAmt(String(m.expected_amount || '')); setDays(1); setScanning(false); }
       else showToast("Member Not Found", "error");
     } catch (e) { showToast("Invalid Card", "error"); }
   }, [mode, showToast]);
@@ -376,61 +238,46 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
         full_name: member.full_name, 
         registration_no: member.registration_no,
         amount: finalAmt, 
+        expected_amount: member.expected_amount,
         employee_name: profile?.name || 'Admin', 
         employee_id: profile?.id || null
       };
-
-      // Apply backdating if admin changed the date
       if (!profile && backDate !== new Date().toISOString().slice(0, 10)) {
         payload.created_at = backDate + 'T' + new Date().toISOString().split('T')[1];
       }
-
       const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([payload]);
-      
       if (error) throw error;
-
       showToast("Payment Recorded!", "success");
       setMember(null);
       onRefresh();
-    } catch (err) {
-      showToast("Save Failed", "error");
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { showToast("Save Failed", "error"); }
+    finally { setSaving(false); }
   };
 
   if (member) return (
     <div style={{ ...styles.modalBox, background: colors.card, margin: '0 auto', maxWidth: 350 }}>
       <small style={{color: colors.primary, fontWeight:'bold'}}>{member.registration_no}</small>
       <h2 style={{margin: '5px 0 20px'}}>{member.full_name}</h2>
-      
       {!profile && (
         <div style={{marginBottom: 15, textAlign: 'left'}}>
           <small style={styles.subtext}>Transaction Date (Admin)</small>
           <input type="date" value={backDate} onChange={e => setBackDate(e.target.value)} style={{...styles.input, marginTop: 5}} />
         </div>
       )}
-
       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 15, marginBottom: 25}}>
-        <div style={{flex: 1}}>
-          <small style={styles.subtext}>Amount (₦)</small>
+        <div style={{flex: 1}}><small style={styles.subtext}>Amount (₦)</small>
           <input type="number" value={amt} onChange={e => setAmt(e.target.value)} style={{ width: '100%', fontSize: 24, fontWeight: 'bold', textAlign: 'center', background: 'none', border: 'none', borderBottom: `2px solid ${colors.primary}`, color: colors.text, outline: 'none' }} />
         </div>
         <div style={{fontSize: 24, opacity: 0.5, paddingTop: 15}}>×</div>
-        <div style={{width: 80}}>
-          <small style={styles.subtext}>Days</small>
+        <div style={{width: 80}}><small style={styles.subtext}>Days</small>
           <input type="number" value={days} onChange={e => setDays(Math.max(1, parseInt(e.target.value) || 1))} style={{ width: '100%', fontSize: 24, fontWeight: 'bold', textAlign: 'center', background: 'none', border: 'none', borderBottom: `2px solid ${colors.primary}`, color: colors.text, outline: 'none' }} />
         </div>
       </div>
-
       <div style={{marginBottom: 20, padding: 15, borderRadius: 12, background: `${colors.primary}10`}}>
         <small style={styles.subtext}>TOTAL TO PAY</small>
         <div style={{fontSize: 28, fontWeight: '900', color: colors.primary}}>₦{(Number(amt) * days).toLocaleString()}</div>
       </div>
-
-      <button disabled={saving} onClick={handlePayment} style={{ ...styles.btnPrimary, background: colors.primary, width: '100%' }}>
-        {saving ? 'Saving...' : 'Confirm Payment'}
-      </button>
+      <button disabled={saving} onClick={handlePayment} style={{ ...styles.btnPrimary, background: colors.primary, width: '100%' }}>{saving ? 'Saving...' : 'Confirm Payment'}</button>
       <button onClick={() => setMember(null)} style={{ ...styles.btnSecondary, width: '100%', marginTop: 10 }}>Cancel</button>
     </div>
   );
@@ -460,22 +307,15 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
     const fd = new FormData(e.target);
     const payload = { full_name: fd.get('n'), registration_no: fd.get('r'), phone_number: fd.get('p') || '', address: fd.get('a') || '', expected_amount: Number(fd.get('am')), ajo_owner_id: 'admin' };
     if (mode === 'loans') { payload.total_loan_amount = Number(fd.get('tla') || 0); payload.total_to_repay = Number(fd.get('ttr') || 0); }
-    
     const { error } = isEdit ? await supabase.from(CONFIG.modes[mode].membersTable).update(payload).eq('id', member.id) : await supabase.from(CONFIG.modes[mode].membersTable).insert([payload]);
-    
-    if (error) {
-      showToast("Error saving", "error");
-    } else {
+    if (error) { showToast("Error saving", "error"); } else {
       if (isEdit) {
-        // Automatically sync previous transactions to match new name/serial
+        // AUTOMATICALLY SYNC EVERYTHING INCLUDING NEW AMOUNT
         await supabase.from(CONFIG.modes[mode].transTable)
-          .update({ 
-            full_name: payload.full_name, 
-            registration_no: payload.registration_no
-          })
+          .update({ full_name: payload.full_name, registration_no: payload.registration_no, expected_amount: payload.expected_amount })
           .eq('contributor_id', member.id);
       }
-      showToast("Saved & Synced", "success"); onSuccess(); 
+      showToast("Saved & History Updated", "success"); onSuccess(); 
     }
   };
   return (
@@ -498,177 +338,74 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
   );
 };
 
-/* ===================== HELPER UI COMPONENTS (NO CHANGES) ===================== */
+/* ===================== REMAINDER OF UI (UNCHANGED) ===================== */
+
+const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, setModal, setBulkPrintList }) => {
+  const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [focusedIdx, setFocusedIdx] = useState(0);
+  const [form, setForm] = useState({ show: false, member: null });
+  const anchorIdx = useRef(null);
+  const filtered = useMemo(() => members.filter(m => (m.full_name || '').toLowerCase().includes(search.toLowerCase()) || (m.registration_no || '').includes(search.toUpperCase())), [members, search]);
+  const handleKeyboard = (e) => {
+    if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+    if (filtered.length === 0) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); const next = Math.min(focusedIdx + 1, filtered.length - 1); if (e.shiftKey) { const start = Math.min(anchorIdx.current ?? focusedIdx, next); const end = Math.max(anchorIdx.current ?? focusedIdx, next); setSelectedIds(filtered.slice(start, end + 1).map(m => m.id)); } setFocusedIdx(next); } 
+    else if (e.key === 'ArrowUp') { e.preventDefault(); const next = Math.max(focusedIdx - 1, 0); if (e.shiftKey) { const start = Math.min(anchorIdx.current ?? focusedIdx, next); const end = Math.max(anchorIdx.current ?? focusedIdx, next); setSelectedIds(filtered.slice(start, end + 1).map(m => m.id)); } setFocusedIdx(next); } 
+    else if (e.key === ' ') { e.preventDefault(); const id = filtered[focusedIdx].id; setSelectedIds(p => p.includes(id) ? p.filter(i => i !== id) : [...p, id]); anchorIdx.current = focusedIdx; }
+  };
+  const getBalance = (m) => { const paid = transactions.filter(t => t.contributor_id === m.id).reduce((s, t) => s + (t.amount || 0), 0); return (m.total_to_repay || 0) - paid; };
+  return (
+    <div onKeyDown={handleKeyboard} tabIndex={0} style={{outline:'none'}}>
+      <SearchBar value={search} onChange={setSearch} placeholder="Search members..." colors={colors} />
+      <div style={{ display: 'flex', gap: 10, marginBottom: 15 }}>{isAdmin && <button onClick={() => setForm({ show: true, member: null })} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>+ New Member</button>}<div style={{display:'flex', gap:5}}><button onClick={() => setSelectedIds(filtered.map(m => m.id))} style={styles.smallGhostBtn}>All</button><button onClick={() => setSelectedIds([])} style={styles.smallGhostBtn}>Clear</button></div></div>
+      {selectedIds.length > 0 && (<div style={{...styles.floatingBar, background: colors.card, borderColor: colors.primary}}><span>{selectedIds.length} Selected</span><div style={{display:'flex', gap: 8}}><button onClick={() => setBulkPrintList(members.filter(m => selectedIds.includes(m.id)))} style={{...styles.btnPrimary, padding: '8px 16px', fontSize: 12, background: '#10b981'}}>Print Cards</button><button onClick={() => setSelectedIds([])} style={{...styles.btnSecondary, padding: '8px 16px', fontSize: 12}}>Cancel</button></div></div>)}
+      {form.show && <MemberForm member={form.member} mode={mode} onClose={() => setForm({ show: false, member: null })} onSuccess={() => { setForm({ show: false, member: null }); onRefresh(); }} showToast={showToast} colors={colors} />}
+      <div style={styles.list}>{filtered.map((m, idx) => {
+        const isSelected = selectedIds.includes(m.id); const isFocused = focusedIdx === idx; const balance = mode === 'loans' ? getBalance(m) : null; const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${m.registration_no}`;
+        return (<div key={m.id} onClick={() => { setSelectedIds(p => p.includes(m.id) ? p.filter(i => i !== m.id) : [...p, m.id]); setFocusedIdx(idx); anchorIdx.current = idx; }} style={{ ...styles.listItem, background: isFocused ? `${colors.primary}15` : colors.card, borderColor: isSelected ? colors.primary : isFocused ? colors.primary : colors.border }}><div style={{ width: 50, height: 50, background: '#fff', borderRadius: 8, overflow: 'hidden', marginRight: 12, border: '1px solid #ddd' }}><img src={qrUrl} alt="qr" style={{ width: '100%', height: '100%' }} /></div><div style={{ flex: 1 }}><strong style={{ fontSize: 14 }}>{m.full_name}</strong><div style={styles.subtext}>{m.registration_no}</div>{mode === 'loans' && <div style={{ fontSize: 10, fontWeight:'bold', color: balance > 0 ? '#ef4444' : '#10b981' }}>Bal: ₦{balance.toLocaleString()}</div>}</div>{isAdmin && (<div style={{display:'flex', gap: 5}}><button onClick={(e) => { e.stopPropagation(); setForm({ show: true, member: m }); }} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button><button onClick={(e) => { e.stopPropagation(); setModal({show:true, title:"Delete?", msg:`Delete ${m.full_name}?`, onConfirm:async ()=>{await supabase.from(CONFIG.modes[mode].membersTable).delete().eq('id', m.id); onRefresh();}}); }} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button></div>)}</div>);
+      })}</div>
+    </div>
+  );
+};
+
+const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, mode }) => {
+  const stats = useMemo(() => { const today = new Date().toISOString().slice(0, 10); const myTs = data.transactions.filter(t => t.employee_id === profile?.id); return { todayTotal: myTs.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0), count: myTs.filter(t => t.created_at.startsWith(today)).length }; }, [data.transactions, profile?.id]);
+  if (view === 'dashboard') return (<div style={styles.fadeIn}><div style={{padding: 30, borderRadius: 24, background: colors.primary, color: '#fff', marginBottom: 20}}><small>COLLECTED TODAY</small><h1 style={{fontSize: 32}}>₦{stats.todayTotal.toLocaleString()}</h1><span>{stats.count} Operations</span></div><SectionHeader title="Recent Activity" icon={<Calendar size={20} />} /><TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} /></div>);
+  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={false} mode={mode} setBulkPrintList={()=>{}} />;
+  if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} mode={mode} />;
+  return null;
+};
 
 const AgentManagement = ({ agents, onRefresh, showToast, colors, confirmAction }) => {
   const [form, setForm] = useState({ show: false, agent: null });
-  return (
-    <div>
-      <button onClick={() => setForm({ show: true, agent: null })} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15, width: '100%' }}><UserPlus size={16} /> New Agent</button>
-      {form.show && <AgentForm agent={form.agent} onClose={() => setForm({ show: false, agent: null })} onSuccess={() => { setForm({ show: false, agent: null }); onRefresh(); }} showToast={showToast} colors={colors} />}
-      <div style={styles.list}>{agents.map(a => (<div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}><div style={{ flex: 1 }}><strong>{a.full_name}</strong><br/><small style={styles.subtext}>ID: {a.employee_id_number}</small></div><div style={{display:'flex', gap:5}}><button onClick={() => setForm({ show: true, agent: a })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button><button onClick={() => confirmAction("Delete?", `Remove ${a.full_name}?`, async () => { await supabase.from('employees').delete().eq('id', a.id); onRefresh(); })} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button></div></div>))}</div>
-    </div>
-  );
+  return (<div><button onClick={() => setForm({ show: true, agent: null })} style={{ ...styles.btnPrimary, background: colors.primary, marginBottom: 15, width: '100%' }}><UserPlus size={16} /> New Agent</button>{form.show && <AgentForm agent={form.agent} onClose={() => setForm({ show: false, agent: null })} onSuccess={() => { setForm({ show: false, agent: null }); onRefresh(); }} showToast={showToast} colors={colors} />}<div style={styles.list}>{agents.map(a => (<div key={a.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}><div style={{ flex: 1 }}><strong>{a.full_name}</strong><br/><small style={styles.subtext}>ID: {a.employee_id_number}</small></div><div style={{display:'flex', gap:5}}><button onClick={() => setForm({ show: true, agent: a })} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button><button onClick={() => confirmAction("Delete?", `Remove ${a.full_name}?`, async () => { await supabase.from('employees').delete().eq('id', a.id); onRefresh(); })} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button></div></div>))}</div></div>);
 };
 
 const AgentForm = ({ agent, onClose, onSuccess, showToast, colors }) => {
   const isEdit = !!agent;
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const payload = { full_name: fd.get('n'), employee_id_number: fd.get('id').toLowerCase(), password: fd.get('p') };
-    const { error } = isEdit ? await supabase.from('employees').update(payload).eq('id', agent.id) : await supabase.from('employees').insert([payload]);
-    if (error) showToast("Error saving", "error"); else { showToast("Saved", "success"); onSuccess(); }
-  };
-  return (
-    <div style={styles.overlay}>
-      <div style={{ ...styles.modalBox, background: colors.card, maxWidth: 350 }}>
-        <h3>{isEdit ? 'Edit' : 'New'} Agent</h3>
-        <form onSubmit={handleSubmit} style={{ textAlign: 'left', display: 'grid', gap: 10 }}>
-          <input name="n" defaultValue={agent?.full_name} placeholder="Name" style={styles.input} required />
-          <input name="id" defaultValue={agent?.employee_id_number} placeholder="Login ID" style={styles.input} required />
-          <input name="p" defaultValue={agent?.password} placeholder="Password" style={styles.input} required />
-          <div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>Save</button><button type="button" onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button></div>
-        </form>
-      </div>
-    </div>
-  );
+  const handleSubmit = async (e) => { e.preventDefault(); const fd = new FormData(e.target); const payload = { full_name: fd.get('n'), employee_id_number: fd.get('id').toLowerCase(), password: fd.get('p') }; const { error } = isEdit ? await supabase.from('employees').update(payload).eq('id', agent.id) : await supabase.from('employees').insert([payload]); if (error) showToast("Error saving", "error"); else { showToast("Saved", "success"); onSuccess(); } };
+  return (<div style={styles.overlay}><div style={{ ...styles.modalBox, background: colors.card, maxWidth: 350 }}><h3>{isEdit ? 'Edit' : 'New'} Agent</h3><form onSubmit={handleSubmit} style={{ textAlign: 'left', display: 'grid', gap: 10 }}><input name="n" defaultValue={agent?.full_name} placeholder="Name" style={styles.input} required /><input name="id" defaultValue={agent?.employee_id_number} placeholder="Login ID" style={styles.input} required /><input name="p" defaultValue={agent?.password} placeholder="Password" style={styles.input} required /><div style={{ display: 'flex', gap: 10 }}><button type="submit" style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>Save</button><button type="button" onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button></div></form></div></div>);
 };
 
 const LoginScreen = ({ onLogin, loading, colors }) => {
   const [type, setType] = useState('admin');
-  return (
-    <div style={{ ...styles.loginPage, background: colors.bg }}>
-      <div style={{ ...styles.loginCard, background: colors.card, borderColor: colors.border }}>
-        <Landmark size={48} color="#3b82f6" style={{ marginBottom: 15 }} />
-        <h2 style={{ color: colors.text }}>{CONFIG.business.name}</h2>
-        <div style={{ display: 'flex', gap: 5, background: '#020617', padding: 4, borderRadius: 10, margin: '20px 0' }}>
-          <button type="button" onClick={() => setType('admin')} style={{ ...styles.tab, background: type === 'admin' ? '#3b82f6' : 'none', color: '#fff' }}>Admin</button>
-          <button type="button" onClick={() => setType('agent')} style={{ ...styles.tab, background: type === 'agent' ? '#3b82f6' : 'none', color: '#fff' }}>Agent</button>
-        </div>
-        <form onSubmit={e => { e.preventDefault(); onLogin({ username: e.target.u.value, password: e.target.p.value }); }}>
-          <input name="u" placeholder="ID Number" style={styles.loginInput} required />
-          <input name="p" type="password" placeholder="Password" style={styles.loginInput} required />
-          <button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: '#3b82f6', width: '100%', marginTop: 10 }}>{loading ? '...' : 'Sign In'}</button>
-        </form>
-      </div>
-    </div>
-  );
+  return (<div style={{ ...styles.loginPage, background: colors.bg }}><div style={{ ...styles.loginCard, background: colors.card, borderColor: colors.border }}><Landmark size={48} color="#3b82f6" style={{ marginBottom: 15 }} /><h2>{CONFIG.business.name}</h2><div style={{ display: 'flex', gap: 5, background: '#020617', padding: 4, borderRadius: 10, margin: '20px 0' }}><button type="button" onClick={() => setType('admin')} style={{ ...styles.tab, background: type === 'admin' ? '#3b82f6' : 'none', color: '#fff' }}>Admin</button><button type="button" onClick={() => setType('agent')} style={{ ...styles.tab, background: type === 'agent' ? '#3b82f6' : 'none', color: '#fff' }}>Agent</button></div><form onSubmit={e => { e.preventDefault(); onLogin({ username: e.target.u.value, password: e.target.p.value }); }}><input name="u" placeholder="ID Number" style={styles.loginInput} required /><input name="p" type="password" placeholder="Password" style={styles.loginInput} required /><button type="submit" disabled={loading} style={{ ...styles.btnPrimary, background: '#3b82f6', width: '100%', marginTop: 10 }}>{loading ? '...' : 'Sign In'}</button></form></div></div>);
 };
 
-const ModeSelection = ({ setMode, colors, onLogout }) => (
-  <div style={{ background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 20 }}>
-    <div style={{ textAlign: 'center', width: '100%', maxWidth: 380 }}>
-      <h2 style={{ color: colors.text, marginBottom: 30 }}>Select Portal</h2>
-      <div style={{ display: 'grid', gap: 15 }}>
-        <button onClick={() => setMode('ajo')} style={{ ...styles.btnPrimary, border: `2px solid ${CONFIG.modes.ajo.primary}`, color: CONFIG.modes.ajo.primary, background: 'none', height: 100, fontSize: 18 }}><Wallet size={28} /> AJO PORTAL</button>
-        <button onClick={() => setMode('loans')} style={{ ...styles.btnPrimary, border: `2px solid ${CONFIG.modes.loans.primary}`, color: CONFIG.modes.loans.primary, background: 'none', height: 100, fontSize: 18 }}><HandCoins size={28} /> LOAN PORTAL</button>
-      </div>
-      <button onClick={onLogout} style={{ marginTop: 30, color: colors.textSecondary, background: 'none', border: 'none', cursor:'pointer' }}>Logout</button>
-    </div>
-  </div>
-);
-
-const Header = ({ business, role, isDark, onToggleTheme, onSwitchMode, colors }) => (
-  <header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <button onClick={onSwitchMode} style={{ background: 'none', border: 'none', color: colors.text, cursor:'pointer' }}><ArrowLeftRight size={20}/></button>
-      <h1 style={{fontSize: 15, fontWeight: '900'}}>{business}</h1>
-    </div>
-    <button onClick={onToggleTheme} style={{background: 'none', border: 'none', cursor:'pointer'}}>{isDark ? <Sun color="#fff"/> : <Moon color="#000"/>}</button>
-  </header>
-);
-
-const Navigation = ({ view, role, onNavigate, onLogout, colors }) => (
-  <nav style={{ ...styles.nav, background: colors.card, borderTop: `1px solid ${colors.border}` }}>
-    <NavBtn active={view === 'dashboard'} icon={<LayoutDashboard/>} label="Home" onClick={() => onNavigate('dashboard')} colors={colors} />
-    <NavBtn active={view === 'members'} icon={<Users/>} label="Members" onClick={() => onNavigate('members')} colors={colors} />
-    {role === 'admin' ? <NavBtn active={view === 'agents'} icon={<UserCheck/>} label="Agents" onClick={() => onNavigate('agents')} colors={colors} /> :
-    <NavBtn active={view === 'scan'} icon={<Camera/>} label="Scan" onClick={() => onNavigate('scan')} colors={colors} />}
-    <NavBtn icon={<LogOut/>} label="Exit" onClick={onLogout} colors={colors} />
-  </nav>
-);
-
-const NavBtn = ({ active, icon, label, onClick, colors }) => (
-  <button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? colors.primary : colors.textSecondary }}>{icon}<span style={{ fontSize: 10 }}>{label}</span></button>
-);
-
-const TransactionList = ({ transactions, colors, showTime = false, showCollector = true }) => (
-  <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-    {transactions.map(t => (
-      <div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-        <div style={{ flex: 1 }}>
-          <strong style={{fontSize: 14}}>{t.full_name}</strong>
-          <div style={{display: 'flex', gap: 10, marginTop: 4}}>{showCollector && <small style={styles.subtext}>{t.employee_name || 'Admin'}</small>}{showTime && (<small style={{...styles.subtext, display:'flex', alignItems:'center', gap:3}}><Clock size={10}/> {new Date(t.created_at).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}</small>)}</div>
-        </div>
-        <strong style={{ color: colors.primary }}>₦{t.amount?.toLocaleString()}</strong>
-      </div>
-    ))}
-  </div>
-);
-
+const ModeSelection = ({ setMode, colors, onLogout }) => (<div style={{ background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 20 }}><div style={{ textAlign: 'center', width: '100%', maxWidth: 380 }}><h2 style={{ color: colors.text, marginBottom: 30 }}>Select Portal</h2><div style={{ display: 'grid', gap: 15 }}><button onClick={() => setMode('ajo')} style={{ ...styles.btnPrimary, border: `2px solid ${CONFIG.modes.ajo.primary}`, color: CONFIG.modes.ajo.primary, background: 'none', height: 100, fontSize: 18 }}><Wallet size={28} /> AJO PORTAL</button><button onClick={() => setMode('loans')} style={{ ...styles.btnPrimary, border: `2px solid ${CONFIG.modes.loans.primary}`, color: CONFIG.modes.loans.primary, background: 'none', height: 100, fontSize: 18 }}><HandCoins size={28} /> LOAN PORTAL</button></div><button onClick={onLogout} style={{ marginTop: 30, color: colors.textSecondary, background: 'none', border: 'none', cursor:'pointer' }}>Logout</button></div></div>);
+const Header = ({ business, isDark, onToggleTheme, onSwitchMode, colors }) => (<header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}><div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><button onClick={onSwitchMode} style={{ background: 'none', border: 'none', color: colors.text, cursor:'pointer' }}><ArrowLeftRight size={20}/></button><h1 style={{fontSize: 15, fontWeight: '900'}}>{business}</h1></div><button onClick={onToggleTheme} style={{background: 'none', border: 'none', cursor:'pointer'}}>{isDark ? <Sun color="#fff"/> : <Moon color="#000"/>}</button></header>);
+const Navigation = ({ view, role, onNavigate, onLogout, colors }) => (<nav style={{ ...styles.nav, background: colors.card, borderTop: `1px solid ${colors.border}` }}><NavBtn active={view === 'dashboard'} icon={<LayoutDashboard/>} label="Home" onClick={() => onNavigate('dashboard')} colors={colors} /><NavBtn active={view === 'members'} icon={<Users/>} label="Members" onClick={() => onNavigate('members')} colors={colors} />{role === 'admin' ? <NavBtn active={view === 'agents'} icon={<UserCheck/>} label="Agents" onClick={() => onNavigate('agents')} colors={colors} /> : <NavBtn active={view === 'scan'} icon={<Camera/>} label="Scan" onClick={() => onNavigate('scan')} colors={colors} />}<NavBtn icon={<LogOut/>} label="Exit" onClick={onLogout} colors={colors} /></nav>);
+const NavBtn = ({ active, icon, label, onClick, colors }) => (<button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? colors.primary : colors.textSecondary }}>{icon}<span style={{ fontSize: 10 }}>{label}</span></button>);
+const TransactionList = ({ transactions, colors, showTime = false, showCollector = true }) => (<div style={{display: 'flex', flexDirection: 'column', gap: 10}}>{transactions.map(t => (<div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}><div style={{ flex: 1 }}><strong style={{fontSize: 14}}>{t.full_name}</strong><div style={{display: 'flex', gap: 10, marginTop: 4}}>{showCollector && <small style={styles.subtext}>{t.employee_name || 'Admin'}</small>}{showTime && (<small style={{...styles.subtext, display:'flex', alignItems:'center', gap:3}}><Clock size={10}/> {new Date(t.created_at).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}</small>)}</div></div><strong style={{ color: colors.primary }}>₦{t.amount?.toLocaleString()}</strong></div>))}</div>);
 const StatCard = ({ title, value, colors }) => (<div style={{ ...styles.statCard, background: colors.card, borderColor: colors.border }}><small style={{ opacity: 0.6, fontSize: 10 }}>{title}</small><div style={{ fontSize: 14, fontWeight: 'bold' }}>{value}</div></div>);
 const SearchBar = ({ value, onChange, placeholder, colors }) => (<div style={{ ...styles.searchBar, background: colors.card, borderColor: colors.border }}><Search size={18} opacity={0.5} /><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ background: 'none', border: 'none', color: colors.text, width: '100%', outline: 'none' }} /></div>);
 const SectionHeader = ({ title, icon }) => (<div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '20px 0 10px' }}>{icon} <strong style={{fontSize: 15}}>{title}</strong></div>);
 const ConfirmationModal = ({ modal, onClose, colors }) => (<div style={styles.overlay}><div style={{ ...styles.modalBox, background: colors.card, borderColor: colors.border, maxWidth: 350 }}><h3>{modal.title}</h3><p style={{fontSize: 14, margin: '15px 0'}}>{modal.msg}</p><div style={{ display: 'flex', gap: 10 }}><button style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }} onClick={() => { modal.onConfirm(); onClose(); }}>Yes</button><button style={{...styles.btnSecondary, flex: 1}} onClick={onClose}>No</button></div></div></div>);
 const ToastContainer = ({ toasts }) => (<div style={styles.toastContainer}>{toasts.map(t => (<div key={t.id} style={{ ...styles.toast, background: t.type === 'error' ? '#ef4444' : '#10b981' }}>{t.message}</div>))}</div>);
 const SkeletonLoader = () => (<div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}><div className="skeleton" style={{ height: 60, borderRadius: 12 }}></div><div className="skeleton" style={{ height: 60, borderRadius: 12 }}></div><div className="skeleton" style={{ height: 60, borderRadius: 12 }}></div></div><div className="skeleton" style={{ height: 150, borderRadius: 12 }}></div></div>);
-
-const PrintEngine = ({ members, mode, perPage }) => {
-  if (members.length === 0) return null;
-  const pages = [];
-  for (let i = 0; i < members.length; i += perPage) { pages.push(members.slice(i, i + perPage)); }
-  return (
-    <div className="print-area">
-      {pages.map((pMembers, pIdx) => (
-        <div key={pIdx} className={`print-grid grid-${perPage}`}>
-          {pMembers.map(m => (
-            <div key={m.id} className="print-card">
-              <h4 style={{ margin: 0, fontSize: '12pt' }}>{CONFIG.business.name}</h4>
-              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${m.registration_no}`} style={{ width: '120px', height: '120px', margin: '3mm 0' }} crossOrigin="anonymous" alt="qr" />
-              <div style={{ textAlign: 'left', width: '100%', fontSize: '10pt' }}>
-                <strong>ID:</strong> {m.registration_no}<br/><strong>NAME:</strong> {m.full_name}
-              </div>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const BulkPrintConfig = ({ members, perPage, setPerPage, onClose, colors }) => {
-  const [isPreparing, setIsPreparing] = useState(false);
-  const handlePrint = () => {
-    setIsPreparing(true);
-    const images = document.querySelectorAll('.print-area img');
-    const promises = Array.from(images).map(img => {
-      if (img.complete) return Promise.resolve();
-      return new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; });
-    });
-    Promise.all(promises).then(() => {
-      setTimeout(() => { setIsPreparing(false); window.print(); }, 500);
-    });
-  };
-  return (
-    <div style={styles.overlay} className="no-print">
-      <div style={{ ...styles.modalBox, background: colors.card, maxWidth: 400 }}>
-        <h3>Print {members.length} Cards</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-          {[1, 4, 8, 12].map(n => (
-            <button key={n} onClick={() => setPerPage(n)} style={{ padding: 12, borderRadius: 10, border: '1px solid', background: perPage === n ? colors.primary : 'none', color: perPage === n ? '#fff' : colors.text, borderColor: colors.primary }}>{n} Per A4</button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button disabled={isPreparing} onClick={handlePrint} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>
-            {isPreparing ? 'Loading...' : 'Open Print Dialog'}
-          </button>
-          <button onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  );
-};
+const PrintEngine = ({ members, perPage }) => { if (members.length === 0) return null; const pages = []; for (let i = 0; i < members.length; i += perPage) { pages.push(members.slice(i, i + perPage)); } return (<div className="print-area">{pages.map((pMembers, pIdx) => (<div key={pIdx} className={`print-grid grid-${perPage}`}>{pMembers.map(m => (<div key={m.id} className="print-card"><h4 style={{ margin: 0, fontSize: '12pt' }}>{CONFIG.business.name}</h4><img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${m.registration_no}`} style={{ width: '120px', height: '120px', margin: '3mm 0' }} crossOrigin="anonymous" alt="qr" /><div style={{ textAlign: 'left', width: '100%', fontSize: '10pt' }}><strong>ID:</strong> {m.registration_no}<br/><strong>NAME:</strong> {m.full_name}</div></div>))}</div>))}</div>); };
+const BulkPrintConfig = ({ members, perPage, setPerPage, onClose, colors }) => { const [isPreparing, setIsPreparing] = useState(false); const handlePrint = () => { setIsPreparing(true); const images = document.querySelectorAll('.print-area img'); const promises = Array.from(images).map(img => { if (img.complete) return Promise.resolve(); return new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; }); }); Promise.all(promises).then(() => { setTimeout(() => { setIsPreparing(false); window.print(); }, 500); }); }; return (<div style={styles.overlay} className="no-print"><div style={{ ...styles.modalBox, background: colors.card, maxWidth: 400 }}><h3>Print {members.length} Cards</h3><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>{[1, 4, 8, 12].map(n => (<button key={n} onClick={() => setPerPage(n)} style={{ padding: 12, borderRadius: 10, border: '1px solid', background: perPage === n ? colors.primary : 'none', color: perPage === n ? '#fff' : colors.text, borderColor: colors.primary }}>{n} Per A4</button>))}</div><div style={{ display: 'flex', gap: 10 }}><button disabled={isPreparing} onClick={handlePrint} style={{ ...styles.btnPrimary, background: colors.primary, flex: 1 }}>{isPreparing ? 'Loading...' : 'Open Print Dialog'}</button><button onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button></div></div></div>); };
 
 const styles = {
   app: { minHeight: '100vh' },
