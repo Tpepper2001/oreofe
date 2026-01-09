@@ -5,7 +5,7 @@ import {
   Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
   Printer, AlertCircle, Moon, Sun, UserCheck, Search,
   TrendingUp, Calendar, Trash2, Edit3, Download, ArrowLeftRight, 
-  Wallet, HandCoins, CheckSquare, Square, BarChart3
+  Wallet, HandCoins, CheckSquare, Square, BarChart3, ChevronLeft, Clock
 } from 'lucide-react';
 
 /* ===================== 1. CONFIGURATION ===================== */
@@ -123,9 +123,7 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
   , [members, search]);
 
   const handleKeyboard = (e) => {
-    // === FIX START: Ignore custom shortcuts if typing in an Input or Textarea ===
     if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-    // === FIX END ===
 
     if (filtered.length === 0) return;
     
@@ -334,6 +332,8 @@ if (typeof document !== 'undefined') {
 /* ===================== LOGIC WRAPPERS ===================== */
 
 const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPrintList, setModal }) => {
+  const [selectedDay, setSelectedDay] = useState(null);
+
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     return { todayRev: data.transactions.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (t.amount || 0), 0), totalRev: data.transactions.reduce((s, t) => s + (t.amount || 0), 0) };
@@ -347,33 +347,50 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
     });
     return Object.entries(groups)
       .sort((a, b) => b[0].localeCompare(a[0]))
-      .slice(0, 7); // Last 7 days
+      .slice(0, 7); 
   }, [data.transactions]);
 
   if (view === 'dashboard') return (
     <div style={styles.fadeIn}>
-      <div style={styles.statsGrid}>
-        <StatCard title="Today" value={`₦${stats.todayRev.toLocaleString()}`} colors={colors} />
-        <StatCard title="People" value={data.members.length} colors={colors} />
-        <StatCard title="Total" value={`₦${stats.totalRev.toLocaleString()}`} colors={colors} />
-      </div>
-
-      <SectionHeader title="Daily Collections" icon={<BarChart3 size={20} />} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
-        {dailyStats.map(([date, amount]) => (
-          <div key={date} style={{ ...styles.listItem, padding: '12px 18px', marginBottom: 0, background: colors.card, borderColor: colors.border }}>
-            <div style={{ flex: 1 }}>
-               <div style={{fontSize: 14, fontWeight: 'bold'}}>{new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
-               <div style={styles.subtext}>{date}</div>
+      {selectedDay ? (
+        <div>
+          <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20}}>
+            <button onClick={() => setSelectedDay(null)} style={{...styles.iconBtn, color: colors.text}}><ChevronLeft size={24}/></button>
+            <div>
+              <h2 style={{margin:0, fontSize: 18}}>{new Date(selectedDay).toLocaleDateString('en-GB', { dateStyle: 'full' })}</h2>
+              <small style={styles.subtext}>Collection Breakdown</small>
             </div>
-            <strong style={{ color: colors.primary, fontSize: 16 }}>₦{amount.toLocaleString()}</strong>
           </div>
-        ))}
-        {dailyStats.length === 0 && <div style={{textAlign: 'center', padding: 20, opacity: 0.5}}>No collection data found</div>}
-      </div>
+          <TransactionList transactions={data.transactions.filter(t => t.created_at.startsWith(selectedDay))} colors={colors} showTime={true} showCollector={true} />
+        </div>
+      ) : (
+        <>
+          <div style={styles.statsGrid}>
+            <StatCard title="Today" value={`₦${stats.todayRev.toLocaleString()}`} colors={colors} />
+            <StatCard title="People" value={data.members.length} colors={colors} />
+            <StatCard title="Total" value={`₦${stats.totalRev.toLocaleString()}`} colors={colors} />
+          </div>
 
-      <SectionHeader title="Recent Activity" icon={<TrendingUp size={20} />} />
-      <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} />
+          <SectionHeader title="Daily Collections" icon={<BarChart3 size={20} />} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+            {dailyStats.map(([date, amount]) => (
+              <div key={date} 
+                onClick={() => setSelectedDay(date)}
+                style={{ ...styles.listItem, padding: '12px 18px', marginBottom: 0, background: colors.card, borderColor: colors.border }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{fontSize: 14, fontWeight: 'bold'}}>{new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+                  <div style={styles.subtext}>{date}</div>
+                </div>
+                <strong style={{ color: colors.primary, fontSize: 16 }}>₦{amount.toLocaleString()}</strong>
+              </div>
+            ))}
+            {dailyStats.length === 0 && <div style={{textAlign: 'center', padding: 20, opacity: 0.5}}>No collection data found</div>}
+          </div>
+
+          <SectionHeader title="Recent Activity" icon={<TrendingUp size={20} />} />
+          <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} />
+        </>
+      )}
     </div>
   );
   if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={true} setModal={setModal} mode={mode} setBulkPrintList={setBulkPrintList} />;
@@ -506,6 +523,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
   const [scanning, setScanning] = useState(false);
   const [member, setMember] = useState(null);
   const [amt, setAmt] = useState('');
+  const [days, setDays] = useState(1);
 
   const handleScanResult = useCallback(async (res) => {
     if (!res || res.length === 0) return;
@@ -519,7 +537,12 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
         const { data: m2 } = await supabase.from(table).select('*').eq('id', lookup).maybeSingle();
         m = m2;
       }
-      if (m) { setMember(m); setAmt(m.expected_amount || ''); setScanning(false); }
+      if (m) { 
+        setMember(m); 
+        setAmt(m.expected_amount || ''); 
+        setDays(1);
+        setScanning(false); 
+      }
       else showToast("Member Not Found", "error");
     } catch (e) { showToast("Invalid Card", "error"); }
   }, [mode, showToast]);
@@ -527,12 +550,30 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
   if (member) return (
     <div style={{ ...styles.modalBox, background: colors.card, margin: '0 auto', maxWidth: 350 }}>
       <small style={{color: colors.primary, fontWeight:'bold'}}>{member.registration_no}</small>
-      <h2 style={{margin: '10px 0'}}>{member.full_name}</h2>
-      <input type="number" value={amt} onChange={e => setAmt(e.target.value)} style={{ width: '100%', fontSize: 32, fontWeight: 'bold', textAlign: 'center', background: 'none', border: 'none', borderBottom: `2px solid ${colors.primary}`, color: colors.text, marginBottom: 20, outline: 'none' }} autoFocus />
+      <h2 style={{margin: '5px 0 20px'}}>{member.full_name}</h2>
+      
+      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 15, marginBottom: 25}}>
+        <div style={{flex: 1}}>
+          <small style={styles.subtext}>Amount (₦)</small>
+          <input type="number" value={amt} onChange={e => setAmt(e.target.value)} style={{ width: '100%', fontSize: 24, fontWeight: 'bold', textAlign: 'center', background: 'none', border: 'none', borderBottom: `2px solid ${colors.primary}`, color: colors.text, outline: 'none' }} />
+        </div>
+        <div style={{fontSize: 24, opacity: 0.5, paddingTop: 15}}>×</div>
+        <div style={{width: 80}}>
+          <small style={styles.subtext}>Days</small>
+          <input type="number" value={days} onChange={e => setDays(Math.max(1, parseInt(e.target.value) || 1))} style={{ width: '100%', fontSize: 24, fontWeight: 'bold', textAlign: 'center', background: 'none', border: 'none', borderBottom: `2px solid ${colors.primary}`, color: colors.text, outline: 'none' }} />
+        </div>
+      </div>
+
+      <div style={{marginBottom: 20, padding: 15, borderRadius: 12, background: `${colors.primary}10`}}>
+        <small style={styles.subtext}>TOTAL TO PAY</small>
+        <div style={{fontSize: 28, fontWeight: '900', color: colors.primary}}>₦{(Number(amt) * days).toLocaleString()}</div>
+      </div>
+
       <button onClick={async () => {
+        const finalAmt = Number(amt) * days;
         const { error } = await supabase.from(CONFIG.modes[mode].transTable).insert([{ 
           contributor_id: member.id, full_name: member.full_name, registration_no: member.registration_no,
-          amount: Number(amt), employee_name: profile?.name || 'Admin', expected_amount: member.expected_amount,
+          amount: finalAmt, employee_name: profile?.name || 'Admin', expected_amount: member.expected_amount,
           employee_id: profile?.id
         }]);
         if (!error) { showToast("Saved!", "success"); setMember(null); onRefresh(); }
@@ -594,11 +635,21 @@ const NavBtn = ({ active, icon, label, onClick, colors }) => (
   <button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? colors.primary : colors.textSecondary }}>{icon}<span style={{ fontSize: 10 }}>{label}</span></button>
 );
 
-const TransactionList = ({ transactions, colors }) => (
+const TransactionList = ({ transactions, colors, showTime = false, showCollector = true }) => (
   <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
     {transactions.map(t => (
       <div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
-        <div style={{ flex: 1 }}><strong>{t.full_name}</strong><br/><small style={styles.subtext}>{t.employee_name || 'Admin'}</small></div>
+        <div style={{ flex: 1 }}>
+          <strong style={{fontSize: 14}}>{t.full_name}</strong>
+          <div style={{display: 'flex', gap: 10, marginTop: 4}}>
+            {showCollector && <small style={styles.subtext}>{t.employee_name || 'Admin'}</small>}
+            {showTime && (
+              <small style={{...styles.subtext, display:'flex', alignItems:'center', gap:3}}>
+                <Clock size={10}/> {new Date(t.created_at).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}
+              </small>
+            )}
+          </div>
+        </div>
         <strong style={{ color: colors.primary }}>₦{t.amount?.toLocaleString()}</strong>
       </div>
     ))}
