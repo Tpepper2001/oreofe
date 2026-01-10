@@ -5,7 +5,7 @@ import {
   Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
   Printer, AlertCircle, Moon, Sun, UserCheck, Search,
   TrendingUp, Calendar, Trash2, Edit3, Download, ArrowLeftRight, 
-  Wallet, HandCoins, CheckSquare, Square, BarChart3, ChevronLeft, Clock, RefreshCw
+  Wallet, HandCoins, CheckSquare, Square, BarChart3, ChevronLeft, Clock, RefreshCw, History
 } from 'lucide-react';
 
 /* ===================== 1. CONFIGURATION ===================== */
@@ -114,40 +114,28 @@ export default function App() {
 const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPrintList, setModal }) => {
   const [selectedDay, setSelectedDay] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [editTrans, setEditTrans] = useState(null);
 
   const handleGlobalSync = async () => {
     setSyncing(true);
     try {
       const { data: members } = await supabase.from(CONFIG.modes[mode].membersTable).select('*');
-      
       for (const m of members) {
-        const { data: badTrans } = await supabase.from(CONFIG.modes[mode].transTable)
-          .select('id, amount')
-          .eq('contributor_id', m.id);
-
+        const { data: badTrans } = await supabase.from(CONFIG.modes[mode].transTable).select('id, amount').eq('contributor_id', m.id);
         if (badTrans && badTrans.length > 0) {
           const updates = badTrans.map(t => {
             const finalAmount = (t.amount && t.amount > 0) ? t.amount : m.expected_amount;
-            return supabase.from(CONFIG.modes[mode].transTable)
-              .update({ 
-                full_name: m.full_name, 
-                registration_no: m.registration_no,
-                expected_amount: m.expected_amount,
-                amount: finalAmount 
-              })
-              .eq('id', t.id);
+            return supabase.from(CONFIG.modes[mode].transTable).update({ 
+              full_name: m.full_name, registration_no: m.registration_no,
+              expected_amount: m.expected_amount, amount: finalAmount 
+            }).eq('id', t.id);
           });
           await Promise.all(updates);
         }
       }
-      
       showToast("History Fixed & Synced", "success");
       onRefresh();
-    } catch (err) { 
-      showToast("Sync Failed", "error"); 
-    } finally { 
-      setSyncing(false); 
-    }
+    } catch (err) { showToast("Sync Failed", "error"); } finally { setSyncing(false); }
   };
 
   const stats = useMemo(() => {
@@ -169,6 +157,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
 
   if (view === 'dashboard') return (
     <div style={styles.fadeIn}>
+      {editTrans && <TransactionEditForm trans={editTrans} mode={mode} colors={colors} onClose={() => setEditTrans(null)} onSuccess={() => { setEditTrans(null); onRefresh(); }} showToast={showToast} />}
       {selectedDay ? (
         <div>
           <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20}}>
@@ -178,7 +167,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
               <small style={styles.subtext}>Collection Breakdown</small>
             </div>
           </div>
-          <TransactionList transactions={data.transactions.filter(t => t.created_at.startsWith(selectedDay))} colors={colors} showTime={true} showCollector={true} />
+          <TransactionList transactions={data.transactions.filter(t => t.created_at.startsWith(selectedDay))} colors={colors} showTime={true} showCollector={true} onEdit={setEditTrans} isAdmin={true} />
         </div>
       ) : (
         <>
@@ -208,7 +197,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
           </div>
 
           <SectionHeader title="Recent Activity" icon={<TrendingUp size={20} />} />
-          <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} />
+          <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} onEdit={setEditTrans} isAdmin={true} />
         </>
       )}
     </div>
@@ -217,6 +206,60 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
   if (view === 'agents') return <AgentManagement agents={data.agents} onRefresh={onRefresh} showToast={showToast} colors={colors} confirmAction={(t,m,c)=>setModal({show:true,title:t,msg:m,onConfirm:c})} />;
   if (view === 'scan') return <ScannerView profile={null} onRefresh={onRefresh} showToast={showToast} colors={colors} mode={mode} />;
   return null;
+};
+
+/* ===================== TRANSACTION EDIT + AUDIT ===================== */
+
+const TransactionEditForm = ({ trans, mode, colors, onClose, onSuccess, showToast }) => {
+  const [loading, setLoading] = useState(false);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const fd = new FormData(e.target);
+    const newAmt = Number(fd.get('amt'));
+    const newDate = fd.get('date');
+    
+    // Create Audit Trail
+    const oldAmt = trans.amount || 0;
+    const timestamp = new Date().toLocaleString();
+    const auditLog = (trans.notes || '') + `\n[AUDIT] ${timestamp}: Amt changed from ₦${oldAmt} to ₦${newAmt} by Admin.`;
+
+    try {
+      const { error } = await supabase.from(CONFIG.modes[mode].transTable)
+        .update({ 
+          amount: newAmt, 
+          created_at: newDate + 'T' + trans.created_at.split('T')[1],
+          notes: auditLog 
+        })
+        .eq('id', trans.id);
+      
+      if (error) throw error;
+      showToast("Transaction Updated", "success");
+      onSuccess();
+    } catch (err) {
+      showToast("Update failed", "error");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div style={styles.overlay}>
+      <div style={{ ...styles.modalBox, background: colors.card, maxWidth: 350 }}>
+        <h3>Edit Transaction</h3>
+        <p style={styles.subtext}>Correction for {trans.full_name}</p>
+        <form onSubmit={handleSubmit} style={{ textAlign: 'left', marginTop: 20 }}>
+          <label style={styles.subtext}>Amount (₦)</label>
+          <input name="amt" type="number" defaultValue={trans.amount} style={{...styles.input, marginBottom: 15}} required />
+          <label style={styles.subtext}>Date</label>
+          <input name="date" type="date" defaultValue={trans.created_at.split('T')[0]} style={{...styles.input, marginBottom: 20}} required />
+          
+          <div style={{display:'flex', gap: 10}}>
+             <button type="submit" disabled={loading} style={{...styles.btnPrimary, background: colors.primary, flex: 1}}>{loading ? '...' : 'Save Changes'}</button>
+             <button type="button" onClick={onClose} style={{...styles.btnSecondary, flex: 1}}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 };
 
 /* ===================== SCANNER & PAYMENT ===================== */
@@ -333,27 +376,8 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
     const fd = new FormData(e.target);
     const payload = { full_name: fd.get('n'), registration_no: fd.get('r'), phone_number: fd.get('p') || '', address: fd.get('a') || '', expected_amount: Number(fd.get('am')), ajo_owner_id: 'admin' };
     if (mode === 'loans') { payload.total_loan_amount = Number(fd.get('tla') || 0); payload.total_to_repay = Number(fd.get('ttr') || 0); }
-    
     const { error } = isEdit ? await supabase.from(CONFIG.modes[mode].membersTable).update(payload).eq('id', member.id) : await supabase.from(CONFIG.modes[mode].membersTable).insert([payload]);
-    
-    if (error) { 
-      showToast("Error saving", "error"); 
-    } else {
-      if (isEdit) {
-        const { data: trans } = await supabase.from(CONFIG.modes[mode].transTable).select('id, amount').eq('contributor_id', member.id);
-        if (trans) {
-          const updates = trans.map(t => supabase.from(CONFIG.modes[mode].transTable).update({ 
-            full_name: payload.full_name, 
-            registration_no: payload.registration_no,
-            expected_amount: payload.expected_amount,
-            amount: (t.amount && t.amount > 0) ? t.amount : payload.expected_amount
-          }).eq('id', t.id));
-          await Promise.all(updates);
-        }
-      }
-      showToast("Saved & History Repaired", "success"); 
-      onSuccess(); 
-    }
+    if (error) showToast("Error saving", "error"); else { showToast("Saved", "success"); onSuccess(); }
   };
   return (
     <div style={styles.overlay}>
@@ -434,7 +458,7 @@ const ModeSelection = ({ setMode, colors, onLogout }) => (<div style={{ backgrou
 const Header = ({ business, isDark, onToggleTheme, onSwitchMode, colors }) => (<header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}><div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><button onClick={onSwitchMode} style={{ background: 'none', border: 'none', color: colors.text, cursor:'pointer' }}><ArrowLeftRight size={20}/></button><h1 style={{fontSize: 15, fontWeight: '900'}}>{business}</h1></div><button onClick={onToggleTheme} style={{background: 'none', border: 'none', cursor:'pointer'}}>{isDark ? <Sun color="#fff"/> : <Moon color="#000"/>}</button></header>);
 const Navigation = ({ view, role, onNavigate, onLogout, colors }) => (<nav style={{ ...styles.nav, background: colors.card, borderTop: `1px solid ${colors.border}` }}><NavBtn active={view === 'dashboard'} icon={<LayoutDashboard/>} label="Home" onClick={() => onNavigate('dashboard')} colors={colors} /><NavBtn active={view === 'members'} icon={<Users/>} label="Members" onClick={() => onNavigate('members')} colors={colors} />{role === 'admin' ? <NavBtn active={view === 'agents'} icon={<UserCheck/>} label="Agents" onClick={() => onNavigate('agents')} colors={colors} /> : <NavBtn active={view === 'scan'} icon={<Camera/>} label="Scan" onClick={() => onNavigate('scan')} colors={colors} />}<NavBtn icon={<LogOut/>} label="Exit" onClick={onLogout} colors={colors} /></nav>);
 const NavBtn = ({ active, icon, label, onClick, colors }) => (<button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? colors.primary : colors.textSecondary }}>{icon}<span style={{ fontSize: 10 }}>{label}</span></button>);
-const TransactionList = ({ transactions, colors, showTime = false, showCollector = true }) => (<div style={{display: 'flex', flexDirection: 'column', gap: 10}}>{transactions.map(t => (<div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}><div style={{ flex: 1 }}><strong style={{fontSize: 14}}>{t.full_name}</strong><div style={{display: 'flex', gap: 10, marginTop: 4}}>{showCollector && <small style={styles.subtext}>{t.employee_name || 'Admin'}</small>}{showTime && (<small style={{...styles.subtext, display:'flex', alignItems:'center', gap:3}}><Clock size={10}/> {new Date(t.created_at).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}</small>)}</div></div><strong style={{ color: colors.primary }}>₦{(Number(t.amount) || 0).toLocaleString()}</strong></div>))}</div>);
+const TransactionList = ({ transactions, colors, showTime = false, showCollector = true, onEdit, isAdmin }) => (<div style={{display: 'flex', flexDirection: 'column', gap: 10}}>{transactions.map(t => (<div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}><div style={{ flex: 1 }}><strong style={{fontSize: 14, display:'flex', alignItems:'center', gap:8}}>{t.full_name} {t.notes && <History size={14} color="#f59e0b" title="Modified"/>}</strong><div style={{display: 'flex', gap: 10, marginTop: 4}}>{showCollector && <small style={styles.subtext}>{t.employee_name || 'Admin'}</small>}{showTime && (<small style={{...styles.subtext, display:'flex', alignItems:'center', gap:3}}><Clock size={10}/> {new Date(t.created_at).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}</small>)}</div></div><div style={{display:'flex', alignItems:'center', gap: 12}}><strong style={{ color: colors.primary }}>₦{(Number(t.amount) || 0).toLocaleString()}</strong>{isAdmin && <button onClick={(e) => { e.stopPropagation(); onEdit(t); }} style={{...styles.iconBtn, color: colors.textSecondary}}><Edit3 size={16}/></button>}</div></div>))}</div>);
 const StatCard = ({ title, value, colors }) => (<div style={{ ...styles.statCard, background: colors.card, borderColor: colors.border }}><small style={{ opacity: 0.6, fontSize: 10 }}>{title}</small><div style={{ fontSize: 14, fontWeight: 'bold' }}>{value}</div></div>);
 const SearchBar = ({ value, onChange, placeholder, colors }) => (<div style={{ ...styles.searchBar, background: colors.card, borderColor: colors.border }}><Search size={18} opacity={0.5} /><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ background: 'none', border: 'none', color: colors.text, width: '100%', outline: 'none' }} /></div>);
 const SectionHeader = ({ title, icon }) => (<div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '20px 0 10px' }}>{icon} <strong style={{fontSize: 15}}>{title}</strong></div>);
