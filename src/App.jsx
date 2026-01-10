@@ -120,9 +120,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
     try {
       const { data: members } = await supabase.from(CONFIG.modes[mode].membersTable).select('*');
       
-      // We process each member's transactions
       for (const m of members) {
-        // Find transactions for this member that are empty or have amount 0
         const { data: badTrans } = await supabase.from(CONFIG.modes[mode].transTable)
           .select('id, amount')
           .eq('contributor_id', m.id);
@@ -135,7 +133,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
                 full_name: m.full_name, 
                 registration_no: m.registration_no,
                 expected_amount: m.expected_amount,
-                amount: finalAmount // FIXING THE "0" OR NULL AMOUNTS
+                amount: finalAmount 
               })
               .eq('id', t.id);
           });
@@ -227,7 +225,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
   const [scanning, setScanning] = useState(false);
   const [member, setMember] = useState(null);
   const [amt, setAmt] = useState('');
-  const [days, setDays] = useState(1);
+  const [days, setDays] = useState('1'); 
   const [backDate, setBackDate] = useState(new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
 
@@ -246,7 +244,7 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
       if (m) { 
         setMember(m); 
         setAmt(String(m.expected_amount || '')); 
-        setDays(1);
+        setDays('1');
         setScanning(false); 
       }
       else showToast("Member Not Found", "error");
@@ -255,11 +253,12 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
 
   const handlePayment = async () => {
     const inputAmt = Number(amt) || member.expected_amount || 0;
+    const inputDays = parseInt(days) || 1;
     if (inputAmt <= 0) return showToast("Enter valid amount", "error");
     
     setSaving(true);
     try {
-      const finalAmt = inputAmt * Number(days);
+      const finalAmt = inputAmt * inputDays;
       const payload = { 
         contributor_id: member.id, 
         full_name: member.full_name, 
@@ -297,12 +296,12 @@ const ScannerView = ({ profile, onRefresh, showToast, colors, mode }) => {
         </div>
         <div style={{fontSize: 24, opacity: 0.5, paddingTop: 15}}>×</div>
         <div style={{width: 80}}><small style={styles.subtext}>Days</small>
-          <input type="number" value={days} onChange={e => setDays(Math.max(1, parseInt(e.target.value) || 1))} style={{ width: '100%', fontSize: 24, fontWeight: 'bold', textAlign: 'center', background: 'none', border: 'none', borderBottom: `2px solid ${colors.primary}`, color: colors.text, outline: 'none' }} />
+          <input type="number" value={days} onChange={e => setDays(e.target.value)} style={{ width: '100%', fontSize: 24, fontWeight: 'bold', textAlign: 'center', background: 'none', border: 'none', borderBottom: `2px solid ${colors.primary}`, color: colors.text, outline: 'none' }} />
         </div>
       </div>
       <div style={{marginBottom: 20, padding: 15, borderRadius: 12, background: `${colors.primary}10`}}>
         <small style={styles.subtext}>TOTAL TO PAY</small>
-        <div style={{fontSize: 28, fontWeight: '900', color: colors.primary}}>₦{( (Number(amt) || member.expected_amount) * days).toLocaleString()}</div>
+        <div style={{fontSize: 28, fontWeight: '900', color: colors.primary}}>₦{( (Number(amt) || member.expected_amount) * (parseInt(days) || 1)).toLocaleString()}</div>
       </div>
       <button disabled={saving} onClick={handlePayment} style={{ ...styles.btnPrimary, background: colors.primary, width: '100%' }}>{saving ? 'Saving...' : 'Confirm Payment'}</button>
       <button onClick={() => setMember(null)} style={{ ...styles.btnSecondary, width: '100%', marginTop: 10 }}>Cancel</button>
@@ -341,7 +340,6 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
       showToast("Error saving", "error"); 
     } else {
       if (isEdit) {
-        // Find existing transactions that might be missing amount info or need updates
         const { data: trans } = await supabase.from(CONFIG.modes[mode].transTable).select('id, amount').eq('contributor_id', member.id);
         if (trans) {
           const updates = trans.map(t => supabase.from(CONFIG.modes[mode].transTable).update({ 
@@ -377,7 +375,7 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
   );
 };
 
-/* ===================== SHARED UI (UNCHANGED) ===================== */
+/* ===================== SHARED UI ===================== */
 
 const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, setModal, setBulkPrintList }) => {
   const [search, setSearch] = useState('');
