@@ -113,29 +113,39 @@ export default function App() {
 
 const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPrintList, setModal }) => {
   const [selectedDay, setSelectedDay] = useState(null);
-  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(null);
   const [editTrans, setEditTrans] = useState(null);
+  const [breakdownSearch, setBreakdownSearch] = useState('');
 
   const handleGlobalSync = async () => {
-    setSyncing(true);
+    setSyncProgress(0);
     try {
       const { data: members } = await supabase.from(CONFIG.modes[mode].membersTable).select('*');
-      for (const m of members) {
-        const { data: badTrans } = await supabase.from(CONFIG.modes[mode].transTable).select('id, amount').eq('contributor_id', m.id);
-        if (badTrans && badTrans.length > 0) {
-          const updates = badTrans.map(t => {
+      const total = members.length;
+      
+      for (let i = 0; i < total; i++) {
+        const m = members[i];
+        // Fetch all transactions for this member
+        const { data: trans } = await supabase.from(CONFIG.modes[mode].transTable).select('id, amount').eq('contributor_id', m.id);
+        
+        if (trans && trans.length > 0) {
+          const updates = trans.map(t => {
             const finalAmount = (t.amount && t.amount > 0) ? t.amount : m.expected_amount;
             return supabase.from(CONFIG.modes[mode].transTable).update({ 
-              full_name: m.full_name, registration_no: m.registration_no,
-              expected_amount: m.expected_amount, amount: finalAmount 
+              full_name: m.full_name, // Sync Name Changes
+              registration_no: m.registration_no,
+              expected_amount: m.expected_amount, 
+              amount: finalAmount 
             }).eq('id', t.id);
           });
           await Promise.all(updates);
         }
+        setSyncProgress(Math.round(((i + 1) / total) * 100));
       }
-      showToast("History Fixed & Synced", "success");
+      showToast("All Records Synced & Names Updated", "success");
       onRefresh();
-    } catch (err) { showToast("Sync Failed", "error"); } finally { setSyncing(false); }
+    } catch (err) { showToast("Sync Failed", "error"); } 
+    finally { setSyncProgress(null); }
   };
 
   const stats = useMemo(() => {
@@ -155,19 +165,32 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
     return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 7); 
   }, [data.transactions]);
 
+  const filteredDayTrans = useMemo(() => {
+    if (!selectedDay) return [];
+    const dayTs = data.transactions.filter(t => t.created_at.startsWith(selectedDay));
+    if (!breakdownSearch) return dayTs;
+    return dayTs.filter(t => 
+      t.full_name?.toLowerCase().includes(breakdownSearch.toLowerCase()) || 
+      t.registration_no?.includes(breakdownSearch.toUpperCase())
+    );
+  }, [selectedDay, data.transactions, breakdownSearch]);
+
   if (view === 'dashboard') return (
     <div style={styles.fadeIn}>
       {editTrans && <TransactionEditForm trans={editTrans} mode={mode} colors={colors} onClose={() => setEditTrans(null)} onSuccess={() => { setEditTrans(null); onRefresh(); }} showToast={showToast} />}
       {selectedDay ? (
         <div>
           <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20}}>
-            <button onClick={() => setSelectedDay(null)} style={{...styles.iconBtn, color: colors.text}}><ChevronLeft size={24}/></button>
+            <button onClick={() => { setSelectedDay(null); setBreakdownSearch(''); }} style={{...styles.iconBtn, color: colors.text}}><ChevronLeft size={24}/></button>
             <div>
               <h2 style={{margin:0, fontSize: 18}}>{new Date(selectedDay).toLocaleDateString('en-GB', { dateStyle: 'full' })}</h2>
               <small style={styles.subtext}>Collection Breakdown</small>
             </div>
           </div>
-          <TransactionList transactions={data.transactions.filter(t => t.created_at.startsWith(selectedDay))} colors={colors} showTime={true} showCollector={true} onEdit={setEditTrans} isAdmin={true} />
+
+          <SearchBar value={breakdownSearch} onChange={setBreakdownSearch} placeholder="Search names in this day..." colors={colors} />
+
+          <TransactionList transactions={filteredDayTrans} colors={colors} showTime={true} showCollector={true} onEdit={setEditTrans} isAdmin={true} />
         </div>
       ) : (
         <>
@@ -178,8 +201,15 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
           </div>
 
           <div style={{marginBottom: 20}}>
-            <button onClick={handleGlobalSync} disabled={syncing} style={{...styles.btnSecondary, width: '100%', background: colors.card, border: `1px solid ${colors.border}`, display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center', color: colors.text}}>
-              <RefreshCw size={16} className={syncing ? "spin" : ""}/> {syncing ? "Repairing Amounts..." : "Global Sync (Fix History & Amounts)"}
+            <button onClick={handleGlobalSync} disabled={syncProgress !== null} style={{...styles.btnSecondary, width: '100%', background: colors.card, border: `1px solid ${colors.border}`, display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center', color: colors.text, position: 'relative', overflow:'hidden'}}>
+              {syncProgress !== null ? (
+                <>
+                  <div style={{position:'absolute', left:0, top:0, bottom:0, background: `${colors.primary}40`, width: `${syncProgress}%`, transition:'width 0.3s'}} />
+                  <span style={{position:'relative', zIndex: 2}}>Syncing History... {syncProgress}%</span>
+                </>
+              ) : (
+                <><RefreshCw size={16}/> Global Sync & Repair</>
+              )}
             </button>
           </div>
 
@@ -219,7 +249,6 @@ const TransactionEditForm = ({ trans, mode, colors, onClose, onSuccess, showToas
     const newAmt = Number(fd.get('amt'));
     const newDate = fd.get('date');
     
-    // Create Audit Trail
     const oldAmt = trans.amount || 0;
     const timestamp = new Date().toLocaleString();
     const auditLog = (trans.notes || '') + `\n[AUDIT] ${timestamp}: Amt changed from ₦${oldAmt} to ₦${newAmt} by Admin.`;
@@ -473,7 +502,7 @@ const styles = {
   header: { padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 },
   main: { padding: 20, paddingBottom: 100, maxWidth: 600, margin: '0 auto' },
   nav: { display: 'flex', justifyContent: 'space-around', padding: '12px 0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 },
-  listItem: { display: 'flex', alignItems: 'center', padding: '10px 15px', borderRadius: 16, border: '1px solid', marginBottom: 10, cursor: 'pointer' },
+  listItem: { display: 'flex', alignItems: 'center', padding: '10px 15px', borderRadius: 16, border: '1px solid', marginBottom: 10, cursor: 'pointer', position:'relative' },
   loginInput: { width: '100%', padding: 14, borderRadius: 12, border: '1px solid #334155', background: '#1e293b', color: '#ffffff', marginBottom: 12, boxSizing: 'border-box', outline: 'none' },
   btnPrimary: { color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
   btnSecondary: { background: '#64748b', color: '#fff', border: 'none', borderRadius: 12, padding: 14, cursor: 'pointer' },
