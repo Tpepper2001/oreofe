@@ -225,7 +225,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
           </div>
 
           <SectionHeader title="Recent Activity" icon={<TrendingUp size={20} />} />
-          <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} onEdit={setEditTrans} isAdmin={true} />
+          <TransactionList transactions={data.transactions.slice(0, 10)} colors={colors} showDate={true} onEdit={setEditTrans} isAdmin={true} />
         </>
       )}
     </div>
@@ -239,7 +239,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
           colors={colors}
           mode={mode}
           onBack={() => setSelectedMemberProfile(null)}
-          onEdit={() => setEditTrans}
+          onEdit={setEditTrans}
         />
       ) : (
         <MemberManagement 
@@ -264,7 +264,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
 
 /* ===================== MEMBER PROFILE VIEW ===================== */
 
-const MemberProfileView = ({ member, transactions, colors, mode, onBack }) => {
+const MemberProfileView = ({ member, transactions, colors, mode, onBack, onEdit }) => {
   const stats = useMemo(() => {
     const total = transactions.reduce((s, t) => s + (Number(t.amount) || 0), 0);
     const count = transactions.length;
@@ -286,7 +286,6 @@ const MemberProfileView = ({ member, transactions, colors, mode, onBack }) => {
         </div>
         <h2 style={{margin: '0 0 5px'}}>{member.full_name}</h2>
         <code style={{color: colors.primary, fontWeight: 'bold'}}>{member.registration_no}</code>
-        {member.phone_number && <p style={{...styles.subtext, marginTop: 10}}>{member.phone_number}</p>}
       </div>
 
       <div style={styles.statsGrid}>
@@ -297,24 +296,49 @@ const MemberProfileView = ({ member, transactions, colors, mode, onBack }) => {
 
       {mode === 'loans' && (
         <div style={{ ...styles.card, background: `${colors.primary}10`, borderColor: colors.primary, padding: 15, marginBottom: 20, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div>
-            <small style={styles.subtext}>LOAN BALANCE</small>
-            <div style={{fontSize: 22, fontWeight: 'bold', color: balance > 0 ? '#ef4444' : '#10b981'}}>₦{balance.toLocaleString()}</div>
-          </div>
-          <div style={{textAlign:'right'}}>
-            <small style={styles.subtext}>TARGET</small>
-            <div style={{fontWeight:'bold'}}>₦{(member.total_to_repay || 0).toLocaleString()}</div>
-          </div>
+          <div><small style={styles.subtext}>LOAN BALANCE</small><div style={{fontSize: 22, fontWeight: 'bold', color: balance > 0 ? '#ef4444' : '#10b981'}}>₦{balance.toLocaleString()}</div></div>
+          <div style={{textAlign:'right'}}><small style={styles.subtext}>TARGET</small><div style={{fontWeight:'bold'}}>₦{(member.total_to_repay || 0).toLocaleString()}</div></div>
         </div>
       )}
 
       <SectionHeader title="Contribution History" icon={<History size={20} />} />
-      <TransactionList transactions={transactions} colors={colors} showTime={true} showCollector={true} isAdmin={false} />
+      <TransactionList transactions={transactions} colors={colors} showTime={true} showDate={true} showCollector={true} isAdmin={true} onEdit={onEdit} />
       
       {transactions.length === 0 && <div style={{textAlign:'center', padding: 40, opacity: 0.5}}>No transactions found.</div>}
     </div>
   );
 };
+
+/* ===================== TRANSACTION LIST COMPONENT ===================== */
+
+const TransactionList = ({ transactions, colors, showTime = false, showDate = false, showCollector = true, onEdit, isAdmin }) => (
+  <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
+    {transactions.map(t => (
+      <div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}>
+        <div style={{ flex: 1 }}>
+          <strong style={{fontSize: 14, display:'flex', alignItems:'center', gap:8}}>{t.full_name} {t.notes && <History size={14} color="#f59e0b" title="Modified"/>}</strong>
+          <div style={{display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4}}>
+            {showCollector && <small style={styles.subtext}>{t.employee_name || 'Admin'}</small>}
+            {showDate && (
+              <small style={{...styles.subtext, display:'flex', alignItems:'center', gap:3}}>
+                <Calendar size={10}/> {new Date(t.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}
+              </small>
+            )}
+            {showTime && (
+              <small style={{...styles.subtext, display:'flex', alignItems:'center', gap:3}}>
+                <Clock size={10}/> {new Date(t.created_at).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}
+              </small>
+            )}
+          </div>
+        </div>
+        <div style={{display:'flex', alignItems:'center', gap: 12}}>
+          <strong style={{ color: colors.primary }}>₦{(Number(t.amount) || 0).toLocaleString()}</strong>
+          {isAdmin && <button onClick={(e) => { e.stopPropagation(); onEdit(t); }} style={{...styles.iconBtn, color: colors.textSecondary}}><Edit3 size={16}/></button>}
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 /* ===================== TRANSACTION EDIT + AUDIT ===================== */
 
@@ -553,7 +577,7 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
 
 const AgentPortal = ({ view, profile, data, onRefresh, showToast, colors, mode }) => {
   const stats = useMemo(() => { const today = new Date().toISOString().slice(0, 10); const myTs = data.transactions.filter(t => t.employee_id === profile?.id); return { todayTotal: myTs.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + (Number(t.amount) || 0), 0), count: myTs.filter(t => t.created_at.startsWith(today)).length }; }, [data.transactions, profile?.id]);
-  if (view === 'dashboard') return (<div style={styles.fadeIn}><div style={{padding: 30, borderRadius: 24, background: colors.primary, color: '#fff', marginBottom: 20}}><small>COLLECTED TODAY</small><h1 style={{fontSize: 32}}>₦{stats.todayTotal.toLocaleString()}</h1><span>{stats.count} Operations</span></div><SectionHeader title="Recent Activity" icon={<Calendar size={20} />} /><TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} /></div>);
+  if (view === 'dashboard') return (<div style={styles.fadeIn}><div style={{padding: 30, borderRadius: 24, background: colors.primary, color: '#fff', marginBottom: 20}}><small>COLLECTED TODAY</small><h1 style={{fontSize: 32}}>₦{stats.todayTotal.toLocaleString()}</h1><span>{stats.count} Operations</span></div><SectionHeader title="Recent Activity" icon={<Calendar size={20} />} /><TransactionList transactions={data.transactions.filter(t => t.employee_id === profile?.id).slice(0, 10)} colors={colors} showDate={true} /></div>);
   if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={false} mode={mode} setBulkPrintList={()=>{}} />;
   if (view === 'scan') return <ScannerView profile={profile} onRefresh={onRefresh} showToast={showToast} colors={colors} mode={mode} />;
   return null;
@@ -579,7 +603,6 @@ const ModeSelection = ({ setMode, colors, onLogout }) => (<div style={{ backgrou
 const Header = ({ business, isDark, onToggleTheme, onSwitchMode, colors }) => (<header style={{ ...styles.header, background: colors.card, borderBottom: `1px solid ${colors.border}` }}><div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><button onClick={onSwitchMode} style={{ background: 'none', border: 'none', color: colors.text, cursor:'pointer' }}><ArrowLeftRight size={20}/></button><h1 style={{fontSize: 15, fontWeight: '900'}}>{business}</h1></div><button onClick={onToggleTheme} style={{background: 'none', border: 'none', cursor:'pointer'}}>{isDark ? <Sun color="#fff"/> : <Moon color="#000"/>}</button></header>);
 const Navigation = ({ view, role, onNavigate, onLogout, colors }) => (<nav style={{ ...styles.nav, background: colors.card, borderTop: `1px solid ${colors.border}` }}><NavBtn active={view === 'dashboard'} icon={<LayoutDashboard/>} label="Home" onClick={() => onNavigate('dashboard')} colors={colors} /><NavBtn active={view === 'members'} icon={<Users/>} label="Members" onClick={() => onNavigate('members')} colors={colors} />{role === 'admin' ? <NavBtn active={view === 'agents'} icon={<UserCheck/>} label="Agents" onClick={() => onNavigate('agents')} colors={colors} /> : <NavBtn active={view === 'scan'} icon={<Camera/>} label="Scan" onClick={() => onNavigate('scan')} colors={colors} />}<NavBtn icon={<LogOut/>} label="Exit" onClick={onLogout} colors={colors} /></nav>);
 const NavBtn = ({ active, icon, label, onClick, colors }) => (<button onClick={onClick} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: active ? colors.primary : colors.textSecondary }}>{icon}<span style={{ fontSize: 10 }}>{label}</span></button>);
-const TransactionList = ({ transactions, colors, showTime = false, showCollector = true, onEdit, isAdmin }) => (<div style={{display: 'flex', flexDirection: 'column', gap: 10}}>{transactions.map(t => (<div key={t.id} style={{ ...styles.listItem, background: colors.card, borderColor: colors.border }}><div style={{ flex: 1 }}><strong style={{fontSize: 14, display:'flex', alignItems:'center', gap:8}}>{t.full_name} {t.notes && <History size={14} color="#f59e0b" title="Modified"/>}</strong><div style={{display: 'flex', gap: 10, marginTop: 4}}>{showCollector && <small style={styles.subtext}>{t.employee_name || 'Admin'}</small>}{showTime && (<small style={{...styles.subtext, display:'flex', alignItems:'center', gap:3}}><Clock size={10}/> {new Date(t.created_at).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}</small>)}</div></div><div style={{display:'flex', alignItems:'center', gap: 12}}><strong style={{ color: colors.primary }}>₦{(Number(t.amount) || 0).toLocaleString()}</strong>{isAdmin && <button onClick={(e) => { e.stopPropagation(); onEdit(t); }} style={{...styles.iconBtn, color: colors.textSecondary}}><Edit3 size={16}/></button>}</div></div>))}</div>);
 const StatCard = ({ title, value, colors }) => (<div style={{ ...styles.statCard, background: colors.card, borderColor: colors.border }}><small style={{ opacity: 0.6, fontSize: 10 }}>{title}</small><div style={{ fontSize: 14, fontWeight: 'bold' }}>{value}</div></div>);
 const SearchBar = ({ value, onChange, placeholder, colors }) => (<div style={{ ...styles.searchBar, background: colors.card, borderColor: colors.border }}><Search size={18} opacity={0.5} /><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ background: 'none', border: 'none', color: colors.text, width: '100%', outline: 'none' }} /></div>);
 const SectionHeader = ({ title, icon }) => (<div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '20px 0 10px' }}>{icon} <strong style={{fontSize: 15}}>{title}</strong></div>);
