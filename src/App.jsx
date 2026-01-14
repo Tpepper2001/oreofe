@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import {
   Users, UserPlus, LayoutDashboard, LogOut, Landmark, X, Camera, 
-  Printer, AlertCircle, Moon, Sun, UserCheck, Search,
+  Printer, AlertCircle, Moon, Sun, UserCheck, Search, User,
   TrendingUp, Calendar, Trash2, Edit3, Download, ArrowLeftRight, 
   Wallet, HandCoins, CheckSquare, Square, BarChart3, ChevronLeft, Clock, RefreshCw, History
 } from 'lucide-react';
@@ -113,6 +113,7 @@ export default function App() {
 
 const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPrintList, setModal }) => {
   const [selectedDay, setSelectedDay] = useState(null);
+  const [selectedMemberProfile, setSelectedMemberProfile] = useState(null);
   const [syncProgress, setSyncProgress] = useState(null);
   const [editTrans, setEditTrans] = useState(null);
   const [breakdownSearch, setBreakdownSearch] = useState('');
@@ -125,14 +126,13 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
       
       for (let i = 0; i < total; i++) {
         const m = members[i];
-        // Fetch all transactions for this member
         const { data: trans } = await supabase.from(CONFIG.modes[mode].transTable).select('id, amount').eq('contributor_id', m.id);
         
         if (trans && trans.length > 0) {
           const updates = trans.map(t => {
             const finalAmount = (t.amount && t.amount > 0) ? t.amount : m.expected_amount;
             return supabase.from(CONFIG.modes[mode].transTable).update({ 
-              full_name: m.full_name, // Sync Name Changes
+              full_name: m.full_name, 
               registration_no: m.registration_no,
               expected_amount: m.expected_amount, 
               amount: finalAmount 
@@ -187,9 +187,7 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
               <small style={styles.subtext}>Collection Breakdown</small>
             </div>
           </div>
-
           <SearchBar value={breakdownSearch} onChange={setBreakdownSearch} placeholder="Search names in this day..." colors={colors} />
-
           <TransactionList transactions={filteredDayTrans} colors={colors} showTime={true} showCollector={true} onEdit={setEditTrans} isAdmin={true} />
         </div>
       ) : (
@@ -232,10 +230,90 @@ const AdminPortal = ({ view, data, onRefresh, showToast, colors, mode, setBulkPr
       )}
     </div>
   );
-  if (view === 'members') return <MemberManagement members={data.members} transactions={data.transactions} onRefresh={onRefresh} showToast={showToast} colors={colors} isAdmin={true} setModal={setModal} mode={mode} setBulkPrintList={setBulkPrintList} />;
+  if (view === 'members') return (
+    <>
+      {selectedMemberProfile ? (
+        <MemberProfileView 
+          member={selectedMemberProfile} 
+          transactions={data.transactions.filter(t => t.contributor_id === selectedMemberProfile.id)}
+          colors={colors}
+          mode={mode}
+          onBack={() => setSelectedMemberProfile(null)}
+          onEdit={() => setEditTrans}
+        />
+      ) : (
+        <MemberManagement 
+          members={data.members} 
+          transactions={data.transactions} 
+          onRefresh={onRefresh} 
+          showToast={showToast} 
+          colors={colors} 
+          isAdmin={true} 
+          setModal={setModal} 
+          mode={mode} 
+          setBulkPrintList={setBulkPrintList}
+          onViewProfile={setSelectedMemberProfile}
+        />
+      )}
+    </>
+  );
   if (view === 'agents') return <AgentManagement agents={data.agents} onRefresh={onRefresh} showToast={showToast} colors={colors} confirmAction={(t,m,c)=>setModal({show:true,title:t,msg:m,onConfirm:c})} />;
   if (view === 'scan') return <ScannerView profile={null} onRefresh={onRefresh} showToast={showToast} colors={colors} mode={mode} />;
   return null;
+};
+
+/* ===================== MEMBER PROFILE VIEW ===================== */
+
+const MemberProfileView = ({ member, transactions, colors, mode, onBack }) => {
+  const stats = useMemo(() => {
+    const total = transactions.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const count = transactions.length;
+    return { total, count };
+  }, [transactions]);
+
+  const balance = mode === 'loans' ? (member.total_to_repay || 0) - stats.total : null;
+
+  return (
+    <div style={styles.fadeIn}>
+      <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20}}>
+        <button onClick={onBack} style={{...styles.iconBtn, color: colors.text}}><ChevronLeft size={24}/></button>
+        <h2 style={{margin:0, fontSize: 18}}>Member Profile</h2>
+      </div>
+
+      <div style={{ ...styles.card, background: colors.card, borderColor: colors.border, padding: 20, marginBottom: 20, textAlign:'center' }}>
+        <div style={{ width: 80, height: 80, borderRadius: '50%', background: colors.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px', fontSize: 32, fontWeight: 'bold' }}>
+          {member.full_name.charAt(0)}
+        </div>
+        <h2 style={{margin: '0 0 5px'}}>{member.full_name}</h2>
+        <code style={{color: colors.primary, fontWeight: 'bold'}}>{member.registration_no}</code>
+        {member.phone_number && <p style={{...styles.subtext, marginTop: 10}}>{member.phone_number}</p>}
+      </div>
+
+      <div style={styles.statsGrid}>
+        <StatCard title="Total Paid" value={`₦${stats.total.toLocaleString()}`} colors={colors} />
+        <StatCard title="Entries" value={stats.count} colors={colors} />
+        <StatCard title="Rate" value={`₦${(member.expected_amount || 0).toLocaleString()}`} colors={colors} />
+      </div>
+
+      {mode === 'loans' && (
+        <div style={{ ...styles.card, background: `${colors.primary}10`, borderColor: colors.primary, padding: 15, marginBottom: 20, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div>
+            <small style={styles.subtext}>LOAN BALANCE</small>
+            <div style={{fontSize: 22, fontWeight: 'bold', color: balance > 0 ? '#ef4444' : '#10b981'}}>₦{balance.toLocaleString()}</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <small style={styles.subtext}>TARGET</small>
+            <div style={{fontWeight:'bold'}}>₦{(member.total_to_repay || 0).toLocaleString()}</div>
+          </div>
+        </div>
+      )}
+
+      <SectionHeader title="Contribution History" icon={<History size={20} />} />
+      <TransactionList transactions={transactions} colors={colors} showTime={true} showCollector={true} isAdmin={false} />
+      
+      {transactions.length === 0 && <div style={{textAlign:'center', padding: 40, opacity: 0.5}}>No transactions found.</div>}
+    </div>
+  );
 };
 
 /* ===================== TRANSACTION EDIT + AUDIT ===================== */
@@ -430,13 +508,14 @@ const MemberForm = ({ member, mode, onClose, onSuccess, showToast, colors }) => 
 
 /* ===================== SHARED UI ===================== */
 
-const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, setModal, setBulkPrintList }) => {
+const MemberManagement = ({ members, transactions, onRefresh, showToast, colors, isAdmin, mode, setModal, setBulkPrintList, onViewProfile }) => {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [focusedIdx, setFocusedIdx] = useState(0);
   const [form, setForm] = useState({ show: false, member: null });
   const anchorIdx = useRef(null);
   const filtered = useMemo(() => members.filter(m => (m.full_name || '').toLowerCase().includes(search.toLowerCase()) || (m.registration_no || '').includes(search.toUpperCase())), [members, search]);
+  
   const handleKeyboard = (e) => {
     if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
     if (filtered.length === 0) return;
@@ -444,7 +523,8 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
     else if (e.key === 'ArrowUp') { e.preventDefault(); const next = Math.max(focusedIdx - 1, 0); if (e.shiftKey) { const start = Math.min(anchorIdx.current ?? focusedIdx, next); const end = Math.max(anchorIdx.current ?? focusedIdx, next); setSelectedIds(filtered.slice(start, end + 1).map(m => m.id)); } setFocusedIdx(next); } 
     else if (e.key === ' ') { e.preventDefault(); const id = filtered[focusedIdx].id; setSelectedIds(p => p.includes(id) ? p.filter(i => i !== id) : [...p, id]); anchorIdx.current = focusedIdx; }
   };
-  const getBalance = (m) => { const paid = transactions.filter(t => t.contributor_id === m.id).reduce((s, t) => s + (t.amount || 0), 0); return (m.total_to_repay || 0) - paid; };
+  const getBalance = (m) => { const paid = transactions.filter(t => t.contributor_id === m.id).reduce((s, t) => s + (Number(t.amount) || 0), 0); return (m.total_to_repay || 0) - paid; };
+
   return (
     <div onKeyDown={handleKeyboard} tabIndex={0} style={{outline:'none'}}>
       <SearchBar value={search} onChange={setSearch} placeholder="Search members..." colors={colors} />
@@ -453,7 +533,19 @@ const MemberManagement = ({ members, transactions, onRefresh, showToast, colors,
       {form.show && <MemberForm member={form.member} mode={mode} onClose={() => setForm({ show: false, member: null })} onSuccess={() => { setForm({ show: false, member: null }); onRefresh(); }} showToast={showToast} colors={colors} />}
       <div style={styles.list}>{filtered.map((m, idx) => {
         const isSelected = selectedIds.includes(m.id); const isFocused = focusedIdx === idx; const balance = mode === 'loans' ? getBalance(m) : null; const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${m.registration_no}`;
-        return (<div key={m.id} onClick={() => { setSelectedIds(p => p.includes(m.id) ? p.filter(i => i !== m.id) : [...p, m.id]); setFocusedIdx(idx); anchorIdx.current = idx; }} style={{ ...styles.listItem, background: isFocused ? `${colors.primary}15` : colors.card, borderColor: isSelected ? colors.primary : isFocused ? colors.primary : colors.border }}><div style={{ width: 50, height: 50, background: '#fff', borderRadius: 8, overflow: 'hidden', marginRight: 12, border: '1px solid #ddd' }}><img src={qrUrl} alt="qr" style={{ width: '100%', height: '100%' }} /></div><div style={{ flex: 1 }}><strong style={{ fontSize: 14 }}>{m.full_name}</strong><div style={styles.subtext}>{m.registration_no}</div>{mode === 'loans' && <div style={{ fontSize: 10, fontWeight:'bold', color: balance > 0 ? '#ef4444' : '#10b981' }}>Bal: ₦{balance.toLocaleString()}</div>}</div>{isAdmin && (<div style={{display:'flex', gap: 5}}><button onClick={(e) => { e.stopPropagation(); setForm({ show: true, member: m }); }} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button><button onClick={(e) => { e.stopPropagation(); setModal({show:true, title:"Delete?", msg:`Delete ${m.full_name}?`, onConfirm:async ()=>{await supabase.from(CONFIG.modes[mode].membersTable).delete().eq('id', m.id); onRefresh();}}); }} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button></div>)}</div>);
+        return (
+          <div key={m.id} onClick={() => { setSelectedIds(p => p.includes(m.id) ? p.filter(i => i !== m.id) : [...p, m.id]); setFocusedIdx(idx); anchorIdx.current = idx; }} style={{ ...styles.listItem, background: isFocused ? `${colors.primary}15` : colors.card, borderColor: isSelected ? colors.primary : isFocused ? colors.primary : colors.border }}>
+            <div style={{ width: 50, height: 50, background: '#fff', borderRadius: 8, overflow: 'hidden', marginRight: 12, border: '1px solid #ddd' }}><img src={qrUrl} alt="qr" style={{ width: '100%', height: '100%' }} /></div>
+            <div style={{ flex: 1 }}><strong style={{ fontSize: 14 }}>{m.full_name}</strong><div style={styles.subtext}>{m.registration_no}</div>{mode === 'loans' && <div style={{ fontSize: 10, fontWeight:'bold', color: balance > 0 ? '#ef4444' : '#10b981' }}>Bal: ₦{balance.toLocaleString()}</div>}</div>
+            {isAdmin && (
+              <div style={{display:'flex', gap: 5}}>
+                <button onClick={(e) => { e.stopPropagation(); onViewProfile(m); }} style={{ ...styles.iconBtn, color: colors.textSecondary }}><User size={18} /></button>
+                <button onClick={(e) => { e.stopPropagation(); setForm({ show: true, member: m }); }} style={{ ...styles.iconBtn, color: colors.primary }}><Edit3 size={18} /></button>
+                <button onClick={(e) => { e.stopPropagation(); setModal({show:true, title:"Delete?", msg:`Delete ${m.full_name}?`, onConfirm:async ()=>{await supabase.from(CONFIG.modes[mode].membersTable).delete().eq('id', m.id); onRefresh();}}); }} style={{ ...styles.iconBtn, color: '#ef4444' }}><Trash2 size={18} /></button>
+              </div>
+            )}
+          </div>
+        );
       })}</div>
     </div>
   );
@@ -520,6 +612,7 @@ const styles = {
   statCard: { padding: 12, borderRadius: 12, border: '1px solid', textAlign: 'center' },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 },
   fadeIn: { animation: 'fadeIn 0.4s ease' },
+  card: { border: '1px solid', borderRadius: 16 },
   toastContainer: { position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10 },
   toast: { padding: '12px 24px', borderRadius: 12, color: '#fff', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }
 };
